@@ -258,16 +258,18 @@ body {
 .offline-badge,
 .tag-offline {
   font-size: 0.65rem;
-  padding: 0.1rem 0.4rem;
-  background: #555566;
-  color: #bbbbcc;
+  padding: 0.15rem 0.45rem;
+  background: #e94560;
+  color: #ffffff;
   border-radius: 4px;
-  font-weight: 600;
+  font-weight: 700;
   text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
 .sidebar-player.player-offline {
-  opacity: 0.55;
+  border-color: rgba(233, 69, 96, 0.5);
+  background: rgba(233, 69, 96, 0.08);
 }
 
 .settings-summary .settings-info {
