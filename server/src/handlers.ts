@@ -10,6 +10,18 @@ import type {
 import { RoomManager } from "./RoomManager.js";
 import { Player } from "./Player.js";
 
+const chatTimestamps = new Map<string, number[]>();
+
+function checkRateLimit(socketId: string): boolean {
+  const now = Date.now();
+  const times = chatTimestamps.get(socketId) ?? [];
+  const valid = times.filter((t) => now - t < 2000);
+  if (valid.length >= 5) return false;
+  valid.push(now);
+  chatTimestamps.set(socketId, valid);
+  return true;
+}
+
 export function registerHandlers(io: Server, manager: RoomManager) {
   io.on("connection", (socket) => {
     console.log(`connected: ${socket.id}`);
@@ -113,6 +125,34 @@ export function registerHandlers(io: Server, manager: RoomManager) {
       room.game.endTurn();
     });
 
+    socket.on(SocketEvent.Chat, (data: { text: string }) => {
+      if (!checkRateLimit(socket.id)) return;
+      const room = manager.getRoomForSocket(socket.id);
+      if (!room || !data?.text) return;
+
+      if (room.game) {
+        room.game.handleChat(socket.id, data.text);
+      } else {
+        const player = room.players.find((p) => p.id === socket.id);
+        if (!player) return;
+        const text = data.text.trim().slice(0, 200);
+        if (!text) return;
+        io.to(room.code).emit(SocketEvent.ChatMessage, {
+          playerId: player.id,
+          name: player.name,
+          text,
+          type: "chat",
+        });
+      }
+    });
+
+    socket.on(SocketEvent.Guess, (data: { text: string }) => {
+      if (!checkRateLimit(socket.id)) return;
+      const room = manager.getRoomForSocket(socket.id);
+      if (!room || !room.game || !data?.text) return;
+      room.game.handleGuess(socket.id, data.text);
+    });
+
     socket.on(SocketEvent.PlayAgain, () => {
       const room = manager.getRoomForSocket(socket.id);
       if (!room) return;
@@ -129,6 +169,7 @@ export function registerHandlers(io: Server, manager: RoomManager) {
     });
 
     socket.on("disconnect", () => {
+      chatTimestamps.delete(socket.id);
       const room = manager.getRoomForSocket(socket.id);
       if (!room) return;
 

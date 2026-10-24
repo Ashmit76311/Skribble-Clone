@@ -1,8 +1,26 @@
 import { Server } from "socket.io";
-import { GamePhase, SocketEvent } from "@skribbl/shared";
-import type { RoomSettings, Stroke, Point, DrawStartPayload, DrawMovePayload } from "@skribbl/shared";
+import { GamePhase, SocketEvent, WordMode } from "@skribbl/shared";
+import type {
+  RoomSettings,
+  Stroke,
+  DrawStartPayload,
+  DrawMovePayload,
+  ChatMessagePayload,
+} from "@skribbl/shared";
 import { Player } from "./Player.js";
 import words from "../words.json" with { type: "json" };
+import {
+  isCorrectGuess,
+  isCloseGuess,
+  containsSecretWord,
+} from "./wordMatching.js";
+import {
+  calculateGuesserPoints,
+  calculateDrawerPoints,
+  determineWinners,
+  DRAWER_POINTS_PER_GUESS,
+} from "./scoring.js";
+import { HintManager } from "./hints.js";
 
 const WORD_SELECT_TIME = 15_000;
 const ROUND_END_DELAY = 5_000;
@@ -30,11 +48,15 @@ export class Game {
   private usedWords = new Set<string>();
   private wordPool: string[];
   private timer: ReturnType<typeof setTimeout> | null = null;
+  private hintTimers: ReturnType<typeof setTimeout>[] = [];
   private endsAt: number | null = null;
   private onEnd: () => void;
   private strokes: Stroke[] = [];
   private pendingStroke: Stroke | null = null;
   private lastDrawMoveTime = 0;
+  private hintManager: HintManager | null = null;
+  private guessOrder = 0;
+  private turnScores: Record<string, number> = {};
 
   constructor(
     io: Server,
@@ -69,6 +91,9 @@ export class Game {
   }
 
   get currentWordLength() {
+    if (this.hintManager) {
+      return this.hintManager.getWordLengthForDisplay();
+    }
     return this.currentWord?.length ?? null;
   }
 
@@ -84,6 +109,10 @@ export class Game {
     this.currentWord = null;
     this.strokes = [];
     this.pendingStroke = null;
+    this.hintManager = null;
+    this.clearHintTimers();
+    this.guessOrder = 0;
+    this.turnScores = {};
 
     this.players.forEach((p) => {
       p.isDrawing = false;
@@ -95,11 +124,20 @@ export class Game {
     drawer.isDrawing = true;
 
     const available = this.wordPool.filter((w) => !this.usedWords.has(w));
-    if (available.length < this.settings.wordCount) {
+    if (available.length < this.settings.wordCount * 2) {
       this.usedWords.clear();
     }
     const pool = this.wordPool.filter((w) => !this.usedWords.has(w));
-    this.wordOptions = pickRandom(pool, this.settings.wordCount);
+
+    if (this.settings.wordMode === WordMode.Combination) {
+      this.wordOptions = [];
+      for (let i = 0; i < this.settings.wordCount; i++) {
+        const pair = pickRandom(pool, 2);
+        this.wordOptions.push(pair.join(" "));
+      }
+    } else {
+      this.wordOptions = pickRandom(pool, this.settings.wordCount);
+    }
 
     this.endsAt = Date.now() + WORD_SELECT_TIME;
 
@@ -110,11 +148,15 @@ export class Game {
       wordOptions: this.wordOptions,
     });
 
-    this.broadcast(SocketEvent.RoundStart, {
-      round: this.round,
-      drawerId: drawer.id,
-      endsAt: this.endsAt,
-    }, drawer.id);
+    this.broadcast(
+      SocketEvent.RoundStart,
+      {
+        round: this.round,
+        drawerId: drawer.id,
+        endsAt: this.endsAt,
+      },
+      drawer.id
+    );
 
     this.broadcastState();
     this.setTimer(WORD_SELECT_TIME, () => this.autoPickWord());
@@ -129,19 +171,55 @@ export class Game {
     this.usedWords.add(word);
     this.phase = GamePhase.DRAWING;
     this.clearTimer();
+    this.clearHintTimers();
+    this.guessOrder = 0;
+    this.turnScores = {};
+
+    this.hintManager = new HintManager(
+      word,
+      this.settings.hints,
+      this.settings.wordMode
+    );
 
     this.endsAt = Date.now() + this.settings.drawTime * 1000;
 
-    this.broadcast(SocketEvent.WordChosen, {
-      wordLength: word.length,
-      endsAt: this.endsAt,
-    }, this.drawer?.id);
+    const totalHints = this.hintManager.totalHints;
+    const drawTimeMs = this.settings.drawTime * 1000;
+    if (totalHints > 0) {
+      const interval = drawTimeMs / (totalHints + 1);
+      for (let i = 1; i <= totalHints; i++) {
+        const t = setTimeout(() => {
+          if (this.phase !== GamePhase.DRAWING || !this.hintManager) return;
+          if (this.hintManager.revealNext()) {
+            const hint = this.hintManager.getMaskedHint();
+            this.broadcastHint(hint);
+          }
+        }, interval * i);
+        this.hintTimers.push(t);
+      }
+    }
+
+    const drawerDisplayLength =
+      this.hintManager.getWordLengthForDisplay() ?? word.length;
+    const guesserDisplayLength = this.hintManager.getWordLengthForDisplay();
+    const maskedHint = this.hintManager.getMaskedHint();
+
+    this.broadcast(
+      SocketEvent.WordChosen,
+      {
+        wordLength: guesserDisplayLength ?? 0,
+        endsAt: this.endsAt,
+        hint: maskedHint,
+      },
+      this.drawer?.id
+    );
 
     if (this.drawer) {
       this.io.to(this.drawer.id).emit(SocketEvent.WordChosen, {
-        wordLength: word.length,
+        wordLength: drawerDisplayLength,
         endsAt: this.endsAt,
         word,
+        hint: word,
       });
     }
 
@@ -150,15 +228,150 @@ export class Game {
     return true;
   }
 
+  private broadcastHint(hint: string) {
+    for (const p of this.players) {
+      if (p.id !== this.drawer?.id && !p.hasGuessed) {
+        this.io.to(p.id).emit(SocketEvent.HintUpdate, { hint });
+      }
+    }
+  }
+
   private autoPickWord() {
     if (this.phase !== GamePhase.WORD_SELECT) return;
-    const word = this.wordOptions[Math.floor(Math.random() * this.wordOptions.length)];
+    const word =
+      this.wordOptions[Math.floor(Math.random() * this.wordOptions.length)];
     if (this.drawer) this.chooseWord(this.drawer.id, word);
   }
 
+  handleGuess(playerId: string, rawText: string) {
+    if (this.phase !== GamePhase.DRAWING || !this.currentWord) return;
+    if (this.drawer?.id === playerId) return;
+    const player = this.players.find((p) => p.id === playerId);
+    if (!player || player.hasGuessed) return;
+
+    const text = rawText.trim();
+    if (!text) return;
+
+    if (isCorrectGuess(text, this.currentWord)) {
+      player.hasGuessed = true;
+      this.guessOrder++;
+      const isFirst = this.guessOrder === 1;
+      const remainingMs = Math.max(0, (this.endsAt ?? Date.now()) - Date.now());
+      const totalMs = this.settings.drawTime * 1000;
+      const points = calculateGuesserPoints(remainingMs, totalMs, isFirst);
+
+      player.score += points;
+      this.turnScores[player.id] = (this.turnScores[player.id] ?? 0) + points;
+
+      if (this.drawer) {
+        this.drawer.score += DRAWER_POINTS_PER_GUESS;
+        this.turnScores[this.drawer.id] =
+          (this.turnScores[this.drawer.id] ?? 0) + DRAWER_POINTS_PER_GUESS;
+      }
+
+      const scores: Record<string, number> = {};
+      this.players.forEach((p) => (scores[p.id] = p.score));
+
+      this.io.to(this.roomCode).emit(SocketEvent.GuessResult, {
+        playerId: player.id,
+        playerName: player.name,
+        correct: true,
+        points,
+        scores,
+      });
+
+      this.io.to(this.roomCode).emit(SocketEvent.ChatMessage, {
+        name: "System",
+        text: `${player.name} guessed the word!`,
+        type: "correct",
+      });
+
+      // Show full word to the player who guessed
+      this.io.to(player.id).emit(SocketEvent.WordChosen, {
+        wordLength: this.currentWord.length,
+        endsAt: this.endsAt!,
+        word: this.currentWord,
+        hint: this.currentWord,
+      });
+
+      this.broadcastState();
+
+      // Check if all non-drawers have guessed
+      const nonDrawers = this.players.filter((p) => p.id !== this.drawer?.id);
+      if (nonDrawers.length > 0 && nonDrawers.every((p) => p.hasGuessed)) {
+        this.endTurn();
+      }
+    } else if (isCloseGuess(text, this.currentWord)) {
+      this.io.to(player.id).emit(SocketEvent.ChatMessage, {
+        name: "System",
+        text: `'${text}' is close!`,
+        type: "close",
+      });
+    } else {
+      // Don't leak secret word if typed in wrong guess
+      if (containsSecretWord(text, this.currentWord)) {
+        return;
+      }
+
+      const msg: ChatMessagePayload = {
+        playerId: player.id,
+        name: player.name,
+        text,
+        type: "guess",
+      };
+
+      // Broadcast wrong guesses only to non-guessers
+      for (const p of this.players) {
+        if (!p.hasGuessed && p.id !== this.drawer?.id) {
+          this.io.to(p.id).emit(SocketEvent.ChatMessage, msg);
+        }
+      }
+    }
+  }
+
+  handleChat(playerId: string, rawText: string) {
+    const player = this.players.find((p) => p.id === playerId);
+    if (!player) return;
+    const text = rawText?.trim();
+    if (!text || text.length > 200) return;
+
+    if (this.phase !== GamePhase.DRAWING) {
+      this.io.to(this.roomCode).emit(SocketEvent.ChatMessage, {
+        playerId: player.id,
+        name: player.name,
+        text,
+        type: "chat",
+      });
+      return;
+    }
+
+    const isDrawer = this.drawer?.id === playerId;
+    const hasGuessed = player.hasGuessed;
+
+    if (isDrawer || hasGuessed) {
+      // Channel for drawer and players who already guessed
+      const msg: ChatMessagePayload = {
+        playerId: player.id,
+        name: player.name,
+        text,
+        type: "chat",
+      };
+      for (const p of this.players) {
+        if (p.id === this.drawer?.id || p.hasGuessed) {
+          this.io.to(p.id).emit(SocketEvent.ChatMessage, msg);
+        }
+      }
+    } else {
+      // Non-guesser: typing into chat box is treated as a guess
+      this.handleGuess(playerId, text);
+    }
+  }
+
   endTurn() {
-    if (this.phase !== GamePhase.DRAWING && this.phase !== GamePhase.WORD_SELECT) return;
+    if (this.phase !== GamePhase.DRAWING && this.phase !== GamePhase.WORD_SELECT)
+      return;
     this.clearTimer();
+    this.clearHintTimers();
     this.phase = GamePhase.ROUND_END;
 
     this.players.forEach((p) => {
@@ -175,6 +388,7 @@ export class Game {
     this.io.to(this.roomCode).emit(SocketEvent.RoundEnd, {
       word: this.currentWord ?? "",
       scores,
+      turnPoints: this.turnScores,
       nextDrawerId: nextDrawer?.id ?? null,
     });
 
@@ -201,6 +415,7 @@ export class Game {
 
   private endGame() {
     this.clearTimer();
+    this.clearHintTimers();
     this.phase = GamePhase.GAME_OVER;
     this.endsAt = null;
     this.currentWord = null;
@@ -210,11 +425,13 @@ export class Game {
       p.hasGuessed = false;
     });
 
-    const sorted = [...this.players].sort((a, b) => b.score - a.score);
-    const leaderboard = sorted.map((p) => p.toJSON());
+    const { leaderboard, winner, winners } = determineWinners(
+      this.players.map((p) => p.toJSON())
+    );
 
     this.io.to(this.roomCode).emit(SocketEvent.GameOver, {
-      winner: leaderboard[0],
+      winner,
+      winners,
       leaderboard,
     });
 
@@ -250,6 +467,7 @@ export class Game {
 
     if (wasDrawing) {
       this.clearTimer();
+      this.clearHintTimers();
       this.currentWord = null;
       this.endsAt = null;
       this.phase = GamePhase.ROUND_END;
@@ -260,6 +478,7 @@ export class Game {
       this.io.to(this.roomCode).emit(SocketEvent.RoundEnd, {
         word: "(skipped)",
         scores,
+        turnPoints: this.turnScores,
         nextDrawerId: this.drawer?.id ?? null,
       });
 
@@ -276,6 +495,7 @@ export class Game {
 
   destroy() {
     this.clearTimer();
+    this.clearHintTimers();
   }
 
   get currentStrokes() {
@@ -285,7 +505,8 @@ export class Game {
   handleDrawStart(playerId: string, data: DrawStartPayload) {
     if (this.phase !== GamePhase.DRAWING) return false;
     if (this.drawer?.id !== playerId) return false;
-    if (!data || !this.validateCoord(data.x) || !this.validateCoord(data.y)) return false;
+    if (!data || !this.validateCoord(data.x) || !this.validateCoord(data.y))
+      return false;
     if (!this.validateColor(data.color)) return false;
     if (!this.validateSize(data.size)) return false;
     if (data.tool !== "brush" && data.tool !== "eraser") return false;
@@ -311,7 +532,8 @@ export class Game {
     if (this.phase !== GamePhase.DRAWING) return false;
     if (this.drawer?.id !== playerId) return false;
     if (!this.pendingStroke) return false;
-    if (!data || !this.validateCoord(data.x) || !this.validateCoord(data.y)) return false;
+    if (!data || !this.validateCoord(data.x) || !this.validateCoord(data.y))
+      return false;
 
     const now = Date.now();
     if (now - this.lastDrawMoveTime < 10) return false;
@@ -352,7 +574,9 @@ export class Game {
     if (this.strokes.length === 0) return false;
 
     this.strokes.pop();
-    this.io.to(this.roomCode).emit(SocketEvent.DrawUndo, { strokes: this.strokes });
+    this.io.to(this.roomCode).emit(SocketEvent.DrawUndo, {
+      strokes: this.strokes,
+    });
     return true;
   }
 
@@ -370,13 +594,26 @@ export class Game {
 
   getStateForPlayer(playerId: string) {
     const isDrawer = this.drawer?.id === playerId;
+    const player = this.players.find((p) => p.id === playerId);
+    const hasGuessed = player?.hasGuessed ?? false;
+    const canSeeWord =
+      isDrawer ||
+      hasGuessed ||
+      this.phase === GamePhase.ROUND_END ||
+      this.phase === GamePhase.GAME_OVER;
+
     return {
       phase: this.phase,
       round: this.round,
       totalRounds: this.settings.rounds,
       drawerId: this.drawer?.id ?? null,
-      wordLength: this.currentWord?.length ?? null,
-      word: isDrawer ? this.currentWord : null,
+      wordLength: canSeeWord
+        ? this.currentWord?.length ?? null
+        : this.hintManager?.getWordLengthForDisplay() ?? null,
+      word: canSeeWord ? this.currentWord : null,
+      hint: canSeeWord
+        ? this.currentWord
+        : this.hintManager?.getMaskedHint() ?? null,
       endsAt: this.endsAt,
       players: this.players.map((p) => p.toJSON()),
     };
@@ -384,16 +621,26 @@ export class Game {
 
   private broadcastState() {
     for (const p of this.players) {
+      const roomData = this.buildRoomData(p.id);
       this.io.to(p.id).emit(SocketEvent.GameState, {
-        room: this.buildRoomData(p.id),
+        room: roomData,
         strokes: this.strokes,
-        hint: null,
+        hint: roomData.hint ?? null,
       });
     }
   }
 
-  private buildRoomData(forPlayerId: string) {
+  buildRoomData(forPlayerId: string) {
     const host = this.players.find((p) => p.isHost);
+    const player = this.players.find((p) => p.id === forPlayerId);
+    const isDrawer = this.drawer?.id === forPlayerId;
+    const hasGuessed = player?.hasGuessed ?? false;
+    const canSeeWord =
+      isDrawer ||
+      hasGuessed ||
+      this.phase === GamePhase.ROUND_END ||
+      this.phase === GamePhase.GAME_OVER;
+
     return {
       code: this.roomCode,
       players: this.players.map((p) => p.toJSON()),
@@ -403,9 +650,14 @@ export class Game {
       currentRound: this.round,
       totalRounds: this.settings.rounds,
       currentDrawer: this.drawer?.id ?? null,
-      wordLength: this.currentWord?.length ?? null,
+      wordLength: canSeeWord
+        ? this.currentWord?.length ?? null
+        : this.hintManager?.getWordLengthForDisplay() ?? null,
       endsAt: this.endsAt,
-      word: forPlayerId === this.drawer?.id ? this.currentWord : null,
+      word: canSeeWord ? this.currentWord : null,
+      hint: canSeeWord
+        ? this.currentWord
+        : this.hintManager?.getMaskedHint() ?? null,
     };
   }
 
@@ -427,5 +679,10 @@ export class Game {
       clearTimeout(this.timer);
       this.timer = null;
     }
+  }
+
+  private clearHintTimers() {
+    this.hintTimers.forEach((t) => clearTimeout(t));
+    this.hintTimers = [];
   }
 }

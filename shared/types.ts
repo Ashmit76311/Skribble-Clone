@@ -44,6 +44,7 @@ export interface RoomData {
   wordLength: number | null;
   endsAt: number | null;
   word?: string | null;
+  hint?: string | null;
 }
 
 export interface Point {
@@ -113,6 +114,7 @@ export interface WordChosenPayload {
   wordLength: number;
   endsAt: number;
   word?: string;
+  hint?: string;
 }
 
 export interface SelectWordPayload {
@@ -122,11 +124,13 @@ export interface SelectWordPayload {
 export interface RoundEndPayload {
   word: string;
   scores: Record<string, number>;
+  turnPoints: Record<string, number>;
   nextDrawerId: string | null;
 }
 
 export interface GameOverPayload {
   winner: PlayerData;
+  winners: PlayerData[];
   leaderboard: PlayerData[];
 }
 
@@ -138,15 +142,17 @@ export interface GameStatePayload {
 
 export interface GuessResultPayload {
   playerId: string;
+  playerName: string;
   correct: boolean;
-  close?: boolean;
-  text?: string;
+  points?: number;
+  scores?: Record<string, number>;
 }
 
 export interface ChatMessagePayload {
-  playerId: string;
+  playerId?: string;
   name: string;
   text: string;
+  type?: "chat" | "guess" | "correct" | "close" | "system";
 }
 
 export interface HostChangedPayload {

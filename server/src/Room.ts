@@ -109,6 +109,7 @@ export class Room {
       currentDrawer: this.game?.drawer?.id ?? null,
       wordLength: this.game?.currentWordLength ?? null,
       endsAt: this.game?.endsAtTimestamp ?? null,
+      hint: null,
     };
   }
 }
