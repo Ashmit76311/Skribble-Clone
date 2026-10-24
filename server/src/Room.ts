@@ -1,6 +1,7 @@
 import { Server } from "socket.io";
 import { GamePhase, RoomData, RoomSettings, WordMode } from "@skribbl/shared";
 import { Player } from "./Player.js";
+import { Game } from "./Game.js";
 
 function clamp(v: number, min: number, max: number) {
   return Math.max(min, Math.min(max, Math.round(v)));
@@ -33,6 +34,7 @@ export class Room {
   players: Player[] = [];
   settings: RoomSettings;
   phase = GamePhase.LOBBY;
+  game: Game | null = null;
 
   constructor(code: string, settings: RoomSettings) {
     this.code = code;
@@ -60,7 +62,35 @@ export class Room {
     if (player.isHost && this.players.length > 0) {
       this.players[0].isHost = true;
     }
+    if (this.game) {
+      this.game.removePlayer(id);
+    }
     return player;
+  }
+
+  startGame(io: Server): string | null {
+    if (this.players.length < 2) return "Need at least 2 players";
+    if (this.phase !== GamePhase.LOBBY) return "Game already in progress";
+
+    this.game = new Game(io, this.code, this.settings, this.players, () => {
+      this.phase = GamePhase.GAME_OVER;
+    });
+    this.phase = GamePhase.WORD_SELECT;
+    this.game.start();
+    return null;
+  }
+
+  resetToLobby() {
+    if (this.game) {
+      this.game.destroy();
+      this.game = null;
+    }
+    this.phase = GamePhase.LOBBY;
+    this.players.forEach((p) => {
+      p.score = 0;
+      p.isDrawing = false;
+      p.hasGuessed = false;
+    });
   }
 
   broadcast(io: Server, event: string, data: unknown) {
@@ -72,10 +102,13 @@ export class Room {
       code: this.code,
       players: this.players.map((p) => p.toJSON()),
       settings: this.settings,
-      phase: this.phase,
+      phase: this.game ? this.game.currentPhase : this.phase,
       hostId: this.host?.id ?? "",
-      currentRound: 0,
-      currentDrawer: null,
+      currentRound: this.game ? this.game.currentRound : 0,
+      totalRounds: this.settings.rounds,
+      currentDrawer: this.game?.drawer?.id ?? null,
+      wordLength: this.game?.currentWordLength ?? null,
+      endsAt: this.game?.endsAtTimestamp ?? null,
     };
   }
 }

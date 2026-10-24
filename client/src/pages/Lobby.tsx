@@ -1,15 +1,18 @@
 import { useEffect, useState, FormEvent } from "react";
 import { useParams, useLocation, useNavigate } from "react-router-dom";
 import { socket } from "../socket";
-import { SocketEvent } from "@skribbl/shared";
+import { GamePhase, SocketEvent } from "@skribbl/shared";
 import type {
   RoomData,
   PlayerJoinedPayload,
   PlayerLeftPayload,
   HostChangedPayload,
+  GameStatePayload,
+  RoundStartPayload,
   ErrorPayload,
 } from "@skribbl/shared";
 import { useToast, ToastContainer } from "../components/Toast";
+import GameScreen from "../components/GameScreen";
 
 export default function Lobby() {
   const { code } = useParams<{ code: string }>();
@@ -39,15 +42,37 @@ export default function Lobby() {
     socket.on(SocketEvent.PlayerJoined, onPlayerJoined);
     socket.on(SocketEvent.PlayerLeft, onPlayerLeft);
     socket.on(SocketEvent.HostChanged, onHostChanged);
+    socket.on(SocketEvent.GameState, onGameState);
+    socket.on(SocketEvent.RoundStart, onRoundStart);
     socket.on(SocketEvent.Error, onError);
 
     return () => {
       socket.off(SocketEvent.PlayerJoined, onPlayerJoined);
       socket.off(SocketEvent.PlayerLeft, onPlayerLeft);
       socket.off(SocketEvent.HostChanged, onHostChanged);
+      socket.off(SocketEvent.GameState, onGameState);
+      socket.off(SocketEvent.RoundStart, onRoundStart);
       socket.off(SocketEvent.Error, onError);
     };
   }, [room]);
+
+  function onGameState(data: GameStatePayload) {
+    setRoom(data.room);
+  }
+
+  function onRoundStart(data: RoundStartPayload) {
+    setRoom((prev) =>
+      prev
+        ? {
+            ...prev,
+            phase: GamePhase.WORD_SELECT,
+            currentRound: data.round,
+            currentDrawer: data.drawerId,
+            endsAt: data.endsAt,
+          }
+        : prev
+    );
+  }
 
   function onPlayerJoined(data: PlayerJoinedPayload) {
     setRoom((prev) => (prev ? { ...prev, players: data.players } : prev));
@@ -150,6 +175,15 @@ export default function Lobby() {
         <p>Joining room...</p>
         <ToastContainer toasts={toasts} />
       </div>
+    );
+  }
+
+  if (room.phase !== GamePhase.LOBBY) {
+    return (
+      <>
+        <GameScreen room={room} setRoom={setRoom} onLeave={leaveRoom} />
+        <ToastContainer toasts={toasts} />
+      </>
     );
   }
 

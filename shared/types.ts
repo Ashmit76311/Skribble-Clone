@@ -39,7 +39,11 @@ export interface RoomData {
   phase: GamePhase;
   hostId: string;
   currentRound: number;
+  totalRounds: number;
   currentDrawer: string | null;
+  wordLength: number | null;
+  endsAt: number | null;
+  word?: string | null;
 }
 
 export interface Point {
@@ -89,27 +93,34 @@ export interface DrawStartPayload {
 export interface RoundStartPayload {
   round: number;
   drawerId: string;
-  drawTime: number;
+  endsAt: number;
   wordOptions?: string[];
 }
 
 export interface WordChosenPayload {
   wordLength: number;
+  endsAt: number;
+  word?: string;
+}
+
+export interface SelectWordPayload {
+  word: string;
 }
 
 export interface RoundEndPayload {
   word: string;
   scores: Record<string, number>;
+  nextDrawerId: string | null;
 }
 
 export interface GameOverPayload {
-  players: PlayerData[];
+  winner: PlayerData;
+  leaderboard: PlayerData[];
 }
 
 export interface GameStatePayload {
   room: RoomData;
   strokes: Stroke[];
-  timeLeft: number;
   hint: string | null;
 }
 

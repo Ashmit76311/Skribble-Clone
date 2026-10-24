@@ -5,6 +5,8 @@ export class Player {
   name: string;
   score = 0;
   isHost = false;
+  isDrawing = false;
+  hasGuessed = false;
 
   constructor(id: string, name: string) {
     this.id = id;
@@ -17,8 +19,8 @@ export class Player {
       name: this.name,
       score: this.score,
       isHost: this.isHost,
-      isDrawing: false,
-      hasGuessed: false,
+      isDrawing: this.isDrawing,
+      hasGuessed: this.hasGuessed,
       isConnected: true,
     };
   }

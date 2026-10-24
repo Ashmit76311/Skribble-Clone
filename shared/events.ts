@@ -7,6 +7,7 @@ export enum SocketEvent {
   GameState = "game_state",
   RoundStart = "round_start",
   WordChosen = "word_chosen",
+  SelectWord = "select_word",
   RoundEnd = "round_end",
   GameOver = "game_over",
   DrawStart = "draw_start",
@@ -23,4 +24,6 @@ export enum SocketEvent {
   HostChanged = "host_changed",
   HintUpdate = "hint_update",
   Timer = "timer",
+  PlayAgain = "play_again",
+  EndTurn = "end_turn",
 }
