@@ -141,3 +141,14 @@ export interface TimerPayload {
 export interface ErrorPayload {
   message: string;
 }
+
+export interface PlayerJoinedPayload {
+  player: PlayerData;
+  players: PlayerData[];
+}
+
+export interface PlayerLeftPayload {
+  playerId: string;
+  name: string;
+  players: PlayerData[];
+}

@@ -1,29 +1,15 @@
-import { useEffect, useState } from "react";
-import { socket } from "./socket";
+import { BrowserRouter, Routes, Route } from "react-router-dom";
+import Home from "./pages/Home";
+import Lobby from "./pages/Lobby";
 import "./App.css";
 
-function App() {
-  const [connected, setConnected] = useState(socket.connected);
-
-  useEffect(() => {
-    const onConnect = () => setConnected(true);
-    const onDisconnect = () => setConnected(false);
-
-    socket.on("connect", onConnect);
-    socket.on("disconnect", onDisconnect);
-
-    return () => {
-      socket.off("connect", onConnect);
-      socket.off("disconnect", onDisconnect);
-    };
-  }, []);
-
+export default function App() {
   return (
-    <div className="app">
-      <h1>skribbl</h1>
-      <p>{connected ? `Connected: ${socket.id}` : "Disconnected"}</p>
-    </div>
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<Home />} />
+        <Route path="/room/:code" element={<Lobby />} />
+      </Routes>
+    </BrowserRouter>
   );
 }
-
-export default App;
