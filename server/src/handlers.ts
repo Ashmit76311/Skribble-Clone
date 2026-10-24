@@ -1,4 +1,4 @@
-import { Server } from "socket.io";
+import { Server, Socket } from "socket.io";
 import { GamePhase, SocketEvent } from "@skribbl/shared";
 import type {
   CreateRoomPayload,
@@ -8,6 +8,7 @@ import type {
   DrawStartPayload,
   DrawMovePayload,
   ChatMessagePayload,
+  KickPlayerPayload,
 } from "@skribbl/shared";
 import { RoomManager } from "./RoomManager.js";
 import { Player } from "./Player.js";
@@ -24,6 +25,14 @@ function checkRateLimit(socketId: string): boolean {
   return true;
 }
 
+function getClientIp(socket: Socket): string {
+  const forwarded = socket.handshake.headers["x-forwarded-for"];
+  if (typeof forwarded === "string") {
+    return forwarded.split(",")[0].trim();
+  }
+  return socket.handshake.address || "";
+}
+
 export function registerHandlers(io: Server, manager: RoomManager) {
   io.on("connection", (socket) => {
     socket.on(SocketEvent.CreateRoom, (data: CreateRoomPayload, cb) => {
@@ -31,7 +40,8 @@ export function registerHandlers(io: Server, manager: RoomManager) {
       if (!name) return cb({ error: "Name is required" });
 
       const room = manager.createRoom(data.settings || {});
-      const player = new Player(socket.id, name);
+      const ip = getClientIp(socket);
+      const player = new Player(socket.id, name, ip);
       room.addPlayer(player);
       socket.join(room.code);
       manager.trackSocket(socket.id, room.code);
@@ -49,7 +59,12 @@ export function registerHandlers(io: Server, manager: RoomManager) {
       const room = manager.getRoom(data.code);
       if (!room) return cb({ error: "Room not found" });
 
-      const player = new Player(socket.id, name);
+      const ip = getClientIp(socket);
+      if (room.isBanned(undefined, ip)) {
+        return cb({ error: "You are banned from this room" });
+      }
+
+      const player = new Player(socket.id, name, ip);
       const err = room.addPlayer(player);
       if (err) return cb({ error: err });
 
@@ -84,8 +99,17 @@ export function registerHandlers(io: Server, manager: RoomManager) {
       const room = manager.getRoom(data.code);
       if (!room) return cb({ error: "Room not found" });
 
+      const ip = getClientIp(socket);
+      if (room.isBanned(undefined, ip)) {
+        return cb({ error: "You are banned from this room" });
+      }
+
       const player = room.getPlayerByToken(data.token);
       if (!player) return cb({ error: "Invalid token or expired session" });
+
+      if (room.isBanned(player.id, ip, player.deviceId)) {
+        return cb({ error: "You are banned from this room" });
+      }
 
       // Cancel grace timer if active
       if (player.disconnectTimer) {
@@ -174,6 +198,83 @@ export function registerHandlers(io: Server, manager: RoomManager) {
         strokes: [],
         hint: null,
       });
+    });
+
+    socket.on(SocketEvent.KickPlayer, (data: KickPlayerPayload) => {
+      const room = manager.getRoomForSocket(socket.id);
+      if (!room) return;
+      const caller = room.getPlayerBySocketId(socket.id);
+      if (!caller?.isHost) {
+        return socket.emit(SocketEvent.Error, {
+          message: "Only the host can kick players",
+        });
+      }
+      if (!data?.playerId) return;
+      if (data.playerId === caller.id) {
+        return socket.emit(SocketEvent.Error, {
+          message: "You cannot kick yourself",
+        });
+      }
+
+      const target = room.players.find((p) => p.id === data.playerId);
+      if (!target) {
+        return socket.emit(SocketEvent.Error, {
+          message: "Player not found",
+        });
+      }
+
+      const isBan = !!data.ban;
+      if (isBan) {
+        room.banPlayer(target);
+      }
+
+      // Invalidate target's token so they cannot rejoin
+      target.token = "";
+
+      // Notify target socket if connected and leave room
+      const targetSocket = io.sockets.sockets.get(target.socketId);
+      if (targetSocket) {
+        targetSocket.emit(SocketEvent.Kicked, {
+          message: isBan
+            ? "You were banned from the room"
+            : "You were kicked from the room",
+          banned: isBan,
+        });
+        targetSocket.leave(room.code);
+        manager.removeSocket(targetSocket.id);
+      }
+
+      // Remove player using existing room removal logic
+      const removed = room.removePlayer(target.id);
+      if (!removed) return;
+
+      if (room.players.length === 0) {
+        if (room.game) room.game.destroy();
+        manager.deleteRoom(room.code);
+        return;
+      }
+
+      room.broadcast(io, SocketEvent.PlayerLeft, {
+        playerId: removed.id,
+        name: removed.name,
+        players: room.players.map((p) => p.toJSON()),
+      });
+
+      if (removed.isHost && room.host) {
+        room.broadcast(io, SocketEvent.HostChanged, {
+          hostId: room.host.id,
+        });
+      }
+
+      if (room.game) {
+        room.game.broadcastState();
+      } else {
+        room.broadcast(io, SocketEvent.GameState, {
+          room: room.toJSON(),
+          strokes: [],
+          hint: null,
+        });
+      }
     });
 
     socket.on(SocketEvent.SelectWord, (data: SelectWordPayload) => {

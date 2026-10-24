@@ -12,15 +12,19 @@ export class Player {
   hasGuessed = false;
   isConnected = true;
   isReady = false;
+  ip?: string;
+  deviceId?: string;
   disconnectTimer: NodeJS.Timeout | null = null;
   disconnectedAt: number | null = null;
   lastReconnectedMsgAt = 0;
 
-  constructor(socketId: string, name: string) {
+  constructor(socketId: string, name: string, ip?: string, deviceId?: string) {
     this.id = crypto.randomUUID();
     this.token = crypto.randomUUID();
     this.socketId = socketId;
     this.name = name;
+    this.ip = ip;
+    this.deviceId = deviceId;
   }
 
   toJSON(): PlayerData {

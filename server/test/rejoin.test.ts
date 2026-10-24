@@ -85,6 +85,8 @@ describe("Session Rejoin & Player Identity", () => {
     room.addPlayer(guesser1);
     room.addPlayer(guesser2);
 
+    guesser1.isReady = true;
+    guesser2.isReady = true;
     // Mock an active game
     const dummyIo = { to: () => ({ emit: () => {} }) } as unknown as Server;
     room.startGame(dummyIo);
@@ -150,6 +152,8 @@ describe("Session Rejoin & Player Identity", () => {
       }),
     } as unknown as Server;
 
+    g1.isReady = true;
+    g2.isReady = true;
     room.startGame(dummyIo);
     const game = room.game!;
     (game as any).phase = GamePhase.DRAWING;
@@ -219,6 +223,8 @@ describe("Session Rejoin & Player Identity", () => {
       }),
     } as unknown as Server;
 
+    g1.isReady = true;
+    g2.isReady = true;
     room.startGame(dummyIo);
     const game = room.game!;
     (game as any).phase = GamePhase.DRAWING;
@@ -260,6 +266,7 @@ describe("Session Rejoin & Player Identity", () => {
       }),
     } as unknown as Server;
 
+    p2.isReady = true;
     room.startGame(dummyIo);
     const game = room.game!;
     (game as any).phase = GamePhase.DRAWING;
@@ -334,6 +341,7 @@ describe("Session Rejoin & Player Identity", () => {
       }),
     } as unknown as Server;
 
+    p2.isReady = true;
     room.startGame(dummyIo);
     const game = room.game!;
 

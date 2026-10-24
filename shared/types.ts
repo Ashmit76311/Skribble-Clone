@@ -213,3 +213,14 @@ export interface JoinRoomResponse {
   playerId?: string;
   error?: string;
 }
+
+export interface KickPlayerPayload {
+  playerId: string;
+  ban?: boolean;
+}
+
+export interface KickedPayload {
+  message: string;
+  banned?: boolean;
+}
+

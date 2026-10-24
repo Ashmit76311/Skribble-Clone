@@ -144,6 +144,7 @@ export default function Lobby() {
     socket.on(SocketEvent.GameState, onGameState);
     socket.on(SocketEvent.RoundStart, onRoundStart);
     socket.on(SocketEvent.Error, onError);
+    socket.on(SocketEvent.Kicked, onKicked);
 
     return () => {
       socket.off(SocketEvent.PlayerJoined, onPlayerJoined);
@@ -152,8 +153,16 @@ export default function Lobby() {
       socket.off(SocketEvent.GameState, onGameState);
       socket.off(SocketEvent.RoundStart, onRoundStart);
       socket.off(SocketEvent.Error, onError);
+      socket.off(SocketEvent.Kicked, onKicked);
     };
   }, [room]);
+
+  function onKicked(data: { message?: string; banned?: boolean }) {
+    if (code) clearStoredSession(code);
+    navigate("/", {
+      state: { toast: data.message || "You were kicked from the room" },
+    });
+  }
 
   function onGameState(data: GameStatePayload) {
     setRoom(data.room);
@@ -252,6 +261,16 @@ export default function Lobby() {
   const me = room?.players.find((p) => p.id === myPlayerId);
   const myReady = me?.isReady ?? false;
 
+  const [confirmKick, setConfirmKick] = useState<{
+    playerId: string;
+    ban: boolean;
+  } | null>(null);
+
+  function executeKick(playerId: string, ban: boolean) {
+    socket.emit(SocketEvent.KickPlayer, { playerId, ban });
+    setConfirmKick(null);
+  }
+
   function toggleReady() {
     socket.emit(SocketEvent.PlayerReady, { ready: !myReady });
   }
@@ -327,13 +346,50 @@ export default function Lobby() {
         <ul className="player-list">
           {room.players.map((p) => (
             <li key={p.id} className="player-item">
-              <span>{p.name}</span>
-              {!p.isConnected && <span className="offline-badge">offline</span>}
-              {p.isHost && <span className="host-badge">host</span>}
-              {p.id === myPlayerId && <span className="you-badge">you</span>}
-              {p.isReady && <span className="ready-badge">✓</span>}
-              {!p.isHost && p.isConnected && !p.isReady && (
-                <span className="not-ready-badge">✗</span>
+              <div className="player-info">
+                <span>{p.name}</span>
+                {!p.isConnected && <span className="offline-badge">offline</span>}
+                {p.isHost && <span className="host-badge">host</span>}
+                {p.id === myPlayerId && <span className="you-badge">you</span>}
+                {p.isReady && <span className="ready-badge">✓</span>}
+                {!p.isHost && p.isConnected && !p.isReady && (
+                  <span className="not-ready-badge">✗</span>
+                )}
+              </div>
+              {isHost && p.id !== myPlayerId && (
+                <div className="player-actions">
+                  {confirmKick?.playerId === p.id ? (
+                    <span className="confirm-group">
+                      <button
+                        className="btn btn-xs btn-danger"
+                        onClick={() => executeKick(p.id, confirmKick.ban)}
+                      >
+                        Confirm {confirmKick.ban ? "Ban" : "Kick"}?
+                      </button>
+                      <button
+                        className="btn btn-xs"
+                        onClick={() => setConfirmKick(null)}
+                      >
+                        Cancel
+                      </button>
+                    </span>
+                  ) : (
+                    <>
+                      <button
+                        className="btn btn-xs btn-kick"
+                        onClick={() => setConfirmKick({ playerId: p.id, ban: false })}
+                      >
+                        Kick
+                      </button>
+                      <button
+                        className="btn btn-xs btn-ban"
+                        onClick={() => setConfirmKick({ playerId: p.id, ban: true })}
+                      >
+                        Ban
+                      </button>
+                    </>
+                  )}
+                </div>
               )}
             </li>
           ))}

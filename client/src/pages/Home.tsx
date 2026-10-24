@@ -1,5 +1,5 @@
 import { useState, useEffect, FormEvent } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { socket } from "../socket";
 import { SocketEvent, WordMode } from "@skribbl/shared";
 import type { RoomSettings } from "@skribbl/shared";
@@ -28,6 +28,7 @@ interface PublicRoom {
 
 export default function Home() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { toasts, addToast } = useToast();
   const [name, setName] = useState(() => localStorage.getItem("name") || "");
   const [settings, setSettings] = useState<RoomSettings>({ ...defaults });
@@ -37,6 +38,13 @@ export default function Home() {
   useEffect(() => {
     fetchPublicRooms();
   }, []);
+
+  useEffect(() => {
+    if (location.state?.toast) {
+      addToast(location.state.toast);
+      navigate(location.pathname, { replace: true, state: {} });
+    }
+  }, [location.state]);
 
   async function fetchPublicRooms() {
     try {

@@ -51,6 +51,16 @@ export default function GameScreen({
   const [chatInput, setChatInput] = useState("");
   const chatBottomRef = useRef<HTMLDivElement>(null);
 
+  const [confirmKick, setConfirmKick] = useState<{
+    playerId: string;
+    ban: boolean;
+  } | null>(null);
+
+  function executeKick(playerId: string, ban: boolean) {
+    socket.emit(SocketEvent.KickPlayer, { playerId, ban });
+    setConfirmKick(null);
+  }
+
   const isDebug =
     import.meta.env.DEV &&
     (import.meta.env.VITE_DEBUG === "true" ||
@@ -417,6 +427,41 @@ export default function GameScreen({
                     {p.isHost && <span className="host-badge">Host</span>}
                     {p.id === myPlayerId && <span className="you-badge">You</span>}
                   </div>
+                  {isHost && p.id !== myPlayerId && (
+                    <div className="sidebar-player-actions">
+                      {confirmKick?.playerId === p.id ? (
+                        <span className="confirm-group">
+                          <button
+                            className="btn btn-xs btn-danger"
+                            onClick={() => executeKick(p.id, confirmKick.ban)}
+                          >
+                            {confirmKick.ban ? "Ban?" : "Kick?"}
+                          </button>
+                          <button
+                            className="btn btn-xs"
+                            onClick={() => setConfirmKick(null)}
+                          >
+                            ✕
+                          </button>
+                        </span>
+                      ) : (
+                        <>
+                          <button
+                            className="btn btn-xs btn-kick"
+                            onClick={() => setConfirmKick({ playerId: p.id, ban: false })}
+                          >
+                            Kick
+                          </button>
+                          <button
+                            className="btn btn-xs btn-ban"
+                            onClick={() => setConfirmKick({ playerId: p.id, ban: true })}
+                          >
+                            Ban
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  )}
                 </li>
               );
             })}

@@ -239,11 +239,60 @@ body {
 .player-item {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 0.5rem;
   padding: 0.5rem 0.75rem;
   background: #0f0f23;
   border-radius: 6px;
   font-size: 0.9rem;
+}
+
+.player-info {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.player-actions,
+.sidebar-player-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-left: auto;
+}
+
+.confirm-group {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.btn-xs {
+  padding: 0.15rem 0.4rem;
+  font-size: 0.72rem;
+  border-radius: 4px;
+}
+
+.btn-kick {
+  background: transparent;
+  border: 1px solid #e94560;
+  color: #e94560;
+}
+
+.btn-kick:hover {
+  background: #e94560;
+  color: #fff;
+}
+
+.btn-ban {
+  background: transparent;
+  border: 1px solid #d63031;
+  color: #ff7675;
+}
+
+.btn-ban:hover {
+  background: #d63031;
+  color: #fff;
 }
 
 .host-badge {
