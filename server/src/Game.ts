@@ -310,6 +310,11 @@ export class Game {
     } else {
       // Don't leak secret word if typed in wrong guess
       if (containsSecretWord(text, this.currentWord)) {
+        this.io.to(player.id).emit(SocketEvent.ChatMessage, {
+          name: "System",
+          text: "Your message contains the secret word and was blocked!",
+          type: "close",
+        });
         return;
       }
 
