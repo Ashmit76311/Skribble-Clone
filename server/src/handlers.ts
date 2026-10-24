@@ -258,6 +258,27 @@ export function registerHandlers(io: Server, manager: RoomManager) {
       });
     });
 
+    socket.on(SocketEvent.GetGameState, () => {
+      const room = manager.getRoomForSocket(socket.id);
+      if (!room) return;
+      const player = room.getPlayerBySocketId(socket.id);
+      if (!player) return;
+
+      if (room.game) {
+        socket.emit(SocketEvent.GameState, {
+          room: room.game.buildRoomData(player.id),
+          strokes: room.game.currentStrokes,
+          hint: room.game.hintManager?.getMaskedHint() ?? null,
+        });
+      } else {
+        socket.emit(SocketEvent.GameState, {
+          room: room.toJSON(),
+          strokes: [],
+          hint: null,
+        });
+      }
+    });
+
     socket.on("disconnect", () => {
       chatTimestamps.delete(socket.id);
       const room = manager.getRoomForSocket(socket.id);

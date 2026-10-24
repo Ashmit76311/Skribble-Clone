@@ -45,6 +45,7 @@ export interface RoomData {
   endsAt: number | null;
   word?: string | null;
   hint?: string | null;
+  wordOptions?: string[];
 }
 
 export interface Point {

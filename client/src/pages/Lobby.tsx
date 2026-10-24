@@ -157,6 +157,9 @@ export default function Lobby() {
 
   function onGameState(data: GameStatePayload) {
     setRoom(data.room);
+    if (data.room.wordOptions) {
+      setInitialWordOptions(data.room.wordOptions);
+    }
   }
 
   function onRoundStart(data: RoundStartPayload) {
@@ -168,9 +171,18 @@ export default function Lobby() {
             currentRound: data.round,
             currentDrawer: data.drawerId,
             endsAt: data.endsAt,
+            wordOptions: data.wordOptions ?? prev.wordOptions,
+            players: prev.players.map((p) => ({
+              ...p,
+              isDrawing: p.id === data.drawerId,
+              hasGuessed: false,
+            })),
           }
         : prev
     );
+    if (data.wordOptions) {
+      setInitialWordOptions(data.wordOptions);
+    }
   }
 
   function onPlayerJoined(data: PlayerJoinedPayload) {

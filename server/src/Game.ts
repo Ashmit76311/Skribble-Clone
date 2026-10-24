@@ -658,7 +658,7 @@ export class Game {
       this.phase === GamePhase.ROUND_END ||
       this.phase === GamePhase.GAME_OVER;
 
-    return {
+    const state: any = {
       phase: this.phase,
       round: this.round,
       totalRounds: this.settings.rounds,
@@ -673,6 +673,12 @@ export class Game {
       endsAt: this.endsAt,
       players: this.players.map((p) => p.toJSON()),
     };
+
+    if (this.phase === GamePhase.WORD_SELECT && isDrawer) {
+      state.wordOptions = this.wordOptions;
+    }
+
+    return state;
   }
 
   public broadcastState() {
@@ -699,7 +705,7 @@ export class Game {
       this.phase === GamePhase.ROUND_END ||
       this.phase === GamePhase.GAME_OVER;
 
-    return {
+    const data: RoomData = {
       code: this.roomCode,
       players: this.players.map((p) => p.toJSON()),
       settings: this.settings,
@@ -717,6 +723,12 @@ export class Game {
         ? this.currentWord
         : this.hintManager?.getMaskedHint() ?? null,
     };
+
+    if (this.phase === GamePhase.WORD_SELECT && isDrawer) {
+      data.wordOptions = this.wordOptions;
+    }
+
+    return data;
   }
 
   private broadcast(event: string, data: unknown, excludeId?: string) {

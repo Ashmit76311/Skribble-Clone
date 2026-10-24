@@ -34,7 +34,11 @@ export default function GameScreen({
   initialWordOptions,
   onLeave,
 }: Props) {
-  const [wordOptions, setWordOptions] = useState<string[]>(initialWordOptions ?? []);
+  const [wordOptions, setWordOptions] = useState<string[]>(
+    room.wordOptions && room.wordOptions.length > 0
+      ? room.wordOptions
+      : (initialWordOptions ?? [])
+  );
   const [roundEndWord, setRoundEndWord] = useState<string | null>(null);
   const [roundEndScores, setRoundEndScores] = useState<Record<string, number>>({});
   const [roundEndTurnPoints, setRoundEndTurnPoints] = useState<Record<string, number>>({});
@@ -53,6 +57,10 @@ export default function GameScreen({
       localStorage.getItem("debug") === "true");
 
   useEffect(() => {
+    socket.emit(SocketEvent.GetGameState);
+  }, []);
+
+  useEffect(() => {
     if (initialStrokes && initialStrokes.length > 0) {
       setStrokes(initialStrokes);
     }
@@ -69,6 +77,12 @@ export default function GameScreen({
       setWordOptions(initialWordOptions);
     }
   }, [initialWordOptions]);
+
+  useEffect(() => {
+    if (room.wordOptions && room.wordOptions.length > 0) {
+      setWordOptions(room.wordOptions);
+    }
+  }, [room.wordOptions]);
 
   useEffect(() => {
     if (room.hint) {
@@ -94,6 +108,7 @@ export default function GameScreen({
               currentRound: data.round,
               currentDrawer: data.drawerId,
               endsAt: data.endsAt,
+              wordOptions: data.wordOptions ?? prev.wordOptions,
               word: null,
               hint: null,
               players: prev.players.map((p) => ({
@@ -118,6 +133,7 @@ export default function GameScreen({
               endsAt: data.endsAt,
               word: data.word ?? prev.word,
               hint: data.hint ?? prev.hint,
+              wordOptions: undefined,
             }
           : prev
       );
@@ -188,6 +204,9 @@ export default function GameScreen({
 
     function onGameState(data: GameStatePayload) {
       setRoom(data.room);
+      if (data.room.wordOptions && data.room.wordOptions.length > 0) {
+        setWordOptions(data.room.wordOptions);
+      }
       if (data.hint) setMaskedHint(data.hint);
       if (data.strokes) setStrokes(data.strokes);
     }
@@ -232,10 +251,17 @@ export default function GameScreen({
   const me = room.players.find((p) => p.id === myPlayerId);
   const hasGuessed = me?.hasGuessed ?? false;
   const drawer = room.players.find((p) => p.id === room.currentDrawer);
+  const currentWordOptions =
+    room.phase === GamePhase.WORD_SELECT && isDrawer
+      ? (room.wordOptions && room.wordOptions.length > 0
+          ? room.wordOptions
+          : wordOptions)
+      : [];
 
   function pickWord(word: string) {
     socket.emit(SocketEvent.SelectWord, { word });
     setWordOptions([]);
+    setRoom((prev) => (prev ? { ...prev, wordOptions: undefined } : prev));
   }
 
   function endTurn() {
@@ -400,7 +426,7 @@ export default function GameScreen({
                   <>
                     <h2>Pick a word</h2>
                     <div className="word-buttons">
-                      {wordOptions.map((w) => (
+                      {currentWordOptions.map((w) => (
                         <button
                           key={w}
                           className="btn btn-word"
