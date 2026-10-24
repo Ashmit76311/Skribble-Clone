@@ -48,8 +48,9 @@ export default function GameScreen({
   const chatBottomRef = useRef<HTMLDivElement>(null);
 
   const isDebug =
-    import.meta.env.VITE_DEBUG === "true" ||
-    localStorage.getItem("debug") === "true";
+    import.meta.env.DEV &&
+    (import.meta.env.VITE_DEBUG === "true" ||
+      localStorage.getItem("debug") === "true");
 
   useEffect(() => {
     if (initialStrokes && initialStrokes.length > 0) {

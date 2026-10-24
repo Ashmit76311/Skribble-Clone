@@ -2,12 +2,26 @@ import express from "express";
 import { createServer } from "http";
 import { Server } from "socket.io";
 import cors from "cors";
+import path from "path";
+import fs from "fs";
+import { fileURLToPath } from "url";
 import { PORT, CLIENT_URL } from "./config.js";
 import { RoomManager } from "./RoomManager.js";
 import { registerHandlers } from "./handlers.js";
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const isProd =
+  process.env.NODE_ENV === "production" ||
+  process.env.NODE_ENV === "prod" ||
+  (!process.env.NODE_ENV &&
+    fs.existsSync(path.resolve(__dirname, "../../client/dist")));
+
 const app = express();
-app.use(cors({ origin: CLIENT_URL }));
+if (!isProd) {
+  app.use(cors({ origin: CLIENT_URL }));
+}
 app.use(express.json());
 
 const manager = new RoomManager();
@@ -39,9 +53,26 @@ app.get("/api/rooms/:code", (req, res) => {
 
 const server = createServer(app);
 const io = new Server(server, {
-  cors: { origin: CLIENT_URL, methods: ["GET", "POST"] },
+  cors: isProd ? undefined : { origin: CLIENT_URL, methods: ["GET", "POST"] },
 });
 
 registerHandlers(io, manager);
 
-server.listen(PORT, () => console.log(`server running on port ${PORT}`));
+if (isProd) {
+  const possiblePaths = [
+    path.resolve(__dirname, "../../client/dist"),
+    path.resolve(__dirname, "../client/dist"),
+    path.resolve(process.cwd(), "client/dist"),
+  ];
+  const clientDist =
+    possiblePaths.find((p) => fs.existsSync(p)) || possiblePaths[0];
+
+  app.use(express.static(clientDist));
+  app.get("*", (_req, res) => {
+    res.sendFile(path.join(clientDist, "index.html"));
+  });
+}
+
+server.listen(PORT, "0.0.0.0", () =>
+  console.log(`server running on port ${PORT}`)
+);

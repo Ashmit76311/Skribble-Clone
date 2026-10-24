@@ -5,7 +5,9 @@ import { SocketEvent, WordMode } from "@skribbl/shared";
 import type { RoomSettings } from "@skribbl/shared";
 import { useToast, ToastContainer } from "../components/Toast";
 
-const SERVER = import.meta.env.VITE_SERVER_URL || "http://localhost:3001";
+const API_BASE =
+  import.meta.env.VITE_SERVER_URL ||
+  (import.meta.env.DEV ? "http://localhost:3001" : "");
 
 const defaults: RoomSettings = {
   maxPlayers: 8,
@@ -38,7 +40,7 @@ export default function Home() {
 
   async function fetchPublicRooms() {
     try {
-      const res = await fetch(`${SERVER}/api/rooms/public`);
+      const res = await fetch(`${API_BASE}/api/rooms/public`);
       setPublicRooms(await res.json());
     } catch {}
   }

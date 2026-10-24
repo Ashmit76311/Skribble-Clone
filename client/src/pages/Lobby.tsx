@@ -1,4 +1,4 @@
-import { useEffect, useState, FormEvent, useRef } from "react";
+import { useEffect, useState, FormEvent } from "react";
 import { useParams, useLocation, useNavigate } from "react-router-dom";
 import { socket } from "../socket";
 import { GamePhase, SocketEvent } from "@skribbl/shared";
@@ -55,7 +55,6 @@ export default function Lobby() {
   const [initialStrokes, setInitialStrokes] = useState<Stroke[]>([]);
   const [initialMessages, setInitialMessages] = useState<ChatMessagePayload[]>([]);
   const [initialWordOptions, setInitialWordOptions] = useState<string[]>([]);
-  const joinedRef = useRef(false);
 
   function performRejoin(token: string) {
     socket.emit(
