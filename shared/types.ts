@@ -30,6 +30,7 @@ export interface PlayerData {
   isDrawing: boolean;
   hasGuessed: boolean;
   isConnected: boolean;
+  isReady: boolean;
 }
 
 export interface RoomData {

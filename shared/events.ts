@@ -28,4 +28,5 @@ export enum SocketEvent {
   EndTurn = "end_turn",
   RejoinRoom = "rejoin_room",
   GetGameState = "get_game_state",
+  PlayerReady = "player_ready",
 }

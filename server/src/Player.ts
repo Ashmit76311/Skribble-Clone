@@ -11,6 +11,7 @@ export class Player {
   isDrawing = false;
   hasGuessed = false;
   isConnected = true;
+  isReady = false;
   disconnectTimer: NodeJS.Timeout | null = null;
   disconnectedAt: number | null = null;
   lastReconnectedMsgAt = 0;
@@ -31,6 +32,7 @@ export class Player {
       isDrawing: this.isDrawing,
       hasGuessed: this.hasGuessed,
       isConnected: this.isConnected,
+      isReady: this.isHost || this.isReady,
     };
   }
 }

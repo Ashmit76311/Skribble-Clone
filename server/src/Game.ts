@@ -483,6 +483,7 @@ export class Game {
     this.players.forEach((p) => {
       p.isDrawing = false;
       p.hasGuessed = false;
+      p.isReady = false;
     });
 
     const { leaderboard, winner, winners } = determineWinners(

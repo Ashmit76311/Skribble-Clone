@@ -163,6 +163,19 @@ export function registerHandlers(io: Server, manager: RoomManager) {
       }
     });
 
+    socket.on(SocketEvent.PlayerReady, (data: { ready: boolean }) => {
+      const room = manager.getRoomForSocket(socket.id);
+      if (!room || room.phase !== GamePhase.LOBBY) return;
+      const player = room.getPlayerBySocketId(socket.id);
+      if (!player || player.isHost) return;
+      player.isReady = !!data?.ready;
+      room.broadcast(io, SocketEvent.GameState, {
+        room: room.toJSON(),
+        strokes: [],
+        hint: null,
+      });
+    });
+
     socket.on(SocketEvent.SelectWord, (data: SelectWordPayload) => {
       const room = manager.getRoomForSocket(socket.id);
       if (!room || !room.game) return;

@@ -237,7 +237,24 @@ export default function Lobby() {
   }
 
   const isHost = room?.hostId === myPlayerId;
-  const canStart = isHost && (room?.players.length ?? 0) >= 2;
+  const allReady =
+    room?.players.every((p) => p.isHost || !p.isConnected || p.isReady) ?? false;
+  const enoughPlayers = (room?.players.length ?? 0) >= 2;
+  const canStart = isHost && enoughPlayers && allReady;
+
+  function getStartHint(): string | null {
+    if (!isHost) return null;
+    if (!enoughPlayers) return "Need at least 2 players";
+    if (!allReady) return "Waiting for players to ready up";
+    return null;
+  }
+
+  const me = room?.players.find((p) => p.id === myPlayerId);
+  const myReady = me?.isReady ?? false;
+
+  function toggleReady() {
+    socket.emit(SocketEvent.PlayerReady, { ready: !myReady });
+  }
 
   if (needsName) {
     return (
@@ -314,6 +331,10 @@ export default function Lobby() {
               {!p.isConnected && <span className="offline-badge">offline</span>}
               {p.isHost && <span className="host-badge">host</span>}
               {p.id === myPlayerId && <span className="you-badge">you</span>}
+              {p.isReady && <span className="ready-badge">✓</span>}
+              {!p.isHost && p.isConnected && !p.isReady && (
+                <span className="not-ready-badge">✗</span>
+              )}
             </li>
           ))}
         </ul>
@@ -330,17 +351,32 @@ export default function Lobby() {
         </div>
       </div>
 
-      {isHost && (
+      {!isHost && (
         <button
-          className="btn btn-primary btn-start"
-          disabled={!canStart}
-          onClick={startGame}
+          className={`btn ${myReady ? "btn-danger" : "btn-primary"} btn-ready`}
+          onClick={toggleReady}
         >
-          {canStart ? "Start Game" : "Need at least 2 players"}
+          {myReady ? "Not Ready" : "Ready"}
         </button>
+      )}
+
+      {isHost && (
+        <div className="start-section">
+          <button
+            className="btn btn-primary btn-start"
+            disabled={!canStart}
+            onClick={startGame}
+          >
+            Start Game
+          </button>
+          {getStartHint() && (
+            <span className="start-hint">{getStartHint()}</span>
+          )}
+        </div>
       )}
 
       <ToastContainer toasts={toasts} />
     </div>
   );
 }
+

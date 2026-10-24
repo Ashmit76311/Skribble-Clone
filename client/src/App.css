@@ -277,6 +277,37 @@ body {
   letter-spacing: 0.5px;
 }
 
+.ready-badge {
+  font-size: 0.75rem;
+  padding: 0.15rem 0.4rem;
+  background: #2ecc71;
+  color: #fff;
+  border-radius: 4px;
+  font-weight: 700;
+}
+
+.not-ready-badge {
+  font-size: 0.75rem;
+  padding: 0.15rem 0.4rem;
+  background: #3a3a5a;
+  color: #889;
+  border-radius: 4px;
+  font-weight: 700;
+}
+
+.start-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  align-items: stretch;
+}
+
+.start-hint {
+  font-size: 0.85rem;
+  color: #889;
+  text-align: center;
+}
+
 .sidebar-player.player-offline {
   border-color: rgba(233, 69, 96, 0.5);
   background: rgba(233, 69, 96, 0.08);

@@ -132,6 +132,10 @@ export class Room {
   startGame(io: Server): string | null {
     if (this.players.length < 2) return "Need at least 2 players";
     if (this.phase !== GamePhase.LOBBY) return "Game already in progress";
+    const notReady = this.players.find(
+      (p) => !p.isHost && p.isConnected && !p.isReady
+    );
+    if (notReady) return `${notReady.name} is not ready`;
 
     this.game = new Game(
       io,
@@ -161,6 +165,7 @@ export class Room {
       p.score = 0;
       p.isDrawing = false;
       p.hasGuessed = false;
+      p.isReady = false;
     });
   }
 
