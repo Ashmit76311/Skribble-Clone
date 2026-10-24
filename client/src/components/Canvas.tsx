@@ -261,28 +261,12 @@ export default function Canvas({ isDrawer, phase, initialStrokes = [] }: CanvasP
   }, []);
 
   function getNormalizedCoords(
-    e: MouseEvent | TouchEvent,
+    e: React.PointerEvent<HTMLCanvasElement>,
     canvas: HTMLCanvasElement
   ): { x: number; y: number } {
     const rect = canvas.getBoundingClientRect();
-    let clientX = 0;
-    let clientY = 0;
-
-    if ("touches" in e) {
-      if (e.touches.length > 0) {
-        clientX = e.touches[0].clientX;
-        clientY = e.touches[0].clientY;
-      } else if (e.changedTouches.length > 0) {
-        clientX = e.changedTouches[0].clientX;
-        clientY = e.changedTouches[0].clientY;
-      }
-    } else {
-      clientX = (e as MouseEvent).clientX;
-      clientY = (e as MouseEvent).clientY;
-    }
-
-    const rawX = (clientX - rect.left) / rect.width;
-    const rawY = (clientY - rect.top) / rect.height;
+    const rawX = (e.clientX - rect.left) / rect.width;
+    const rawY = (e.clientY - rect.top) / rect.height;
 
     const x = Math.max(0, Math.min(1, rawX));
     const y = Math.max(0, Math.min(1, rawY));
@@ -290,13 +274,15 @@ export default function Canvas({ isDrawer, phase, initialStrokes = [] }: CanvasP
     return { x: Number(x.toFixed(4)), y: Number(y.toFixed(4)) };
   }
 
-  function handleStart(e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) {
+  function handlePointerDown(e: React.PointerEvent<HTMLCanvasElement>) {
     if (!isDrawer || phase !== GamePhase.DRAWING) return;
+    if (e.button !== 0 && e.pointerType === "mouse") return;
     const canvas = canvasRef.current;
     if (!canvas) return;
 
+    canvas.setPointerCapture(e.pointerId);
     isDrawingRef.current = true;
-    const coords = getNormalizedCoords(e.nativeEvent, canvas);
+    const coords = getNormalizedCoords(e, canvas);
     socket.emit(SocketEvent.DrawStart, {
       x: coords.x,
       y: coords.y,
@@ -306,21 +292,35 @@ export default function Canvas({ isDrawer, phase, initialStrokes = [] }: CanvasP
     });
   }
 
-  function handleMove(e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) {
+  function handlePointerMove(e: React.PointerEvent<HTMLCanvasElement>) {
     if (!isDrawingRef.current || !isDrawer || phase !== GamePhase.DRAWING) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    const coords = getNormalizedCoords(e.nativeEvent, canvas);
+    const coords = getNormalizedCoords(e, canvas);
     socket.emit(SocketEvent.DrawMove, {
       x: coords.x,
       y: coords.y,
     });
   }
 
-  function handleEnd() {
+  function handlePointerUp(e: React.PointerEvent<HTMLCanvasElement>) {
     if (!isDrawingRef.current) return;
     isDrawingRef.current = false;
+    const canvas = canvasRef.current;
+    if (canvas && canvas.hasPointerCapture(e.pointerId)) {
+      canvas.releasePointerCapture(e.pointerId);
+    }
+    socket.emit(SocketEvent.DrawEnd);
+  }
+
+  function handlePointerCancel(e: React.PointerEvent<HTMLCanvasElement>) {
+    if (!isDrawingRef.current) return;
+    isDrawingRef.current = false;
+    const canvas = canvasRef.current;
+    if (canvas && canvas.hasPointerCapture(e.pointerId)) {
+      canvas.releasePointerCapture(e.pointerId);
+    }
     socket.emit(SocketEvent.DrawEnd);
   }
 
@@ -344,13 +344,10 @@ export default function Canvas({ isDrawer, phase, initialStrokes = [] }: CanvasP
           width={CANVAS_WIDTH}
           height={CANVAS_HEIGHT}
           className="drawing-canvas"
-          onMouseDown={handleStart}
-          onMouseMove={handleMove}
-          onMouseUp={handleEnd}
-          onMouseLeave={handleEnd}
-          onTouchStart={handleStart}
-          onTouchMove={handleMove}
-          onTouchEnd={handleEnd}
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+          onPointerCancel={handlePointerCancel}
         />
       </div>
 
