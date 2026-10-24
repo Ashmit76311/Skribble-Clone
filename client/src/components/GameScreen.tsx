@@ -252,7 +252,7 @@ export default function GameScreen({ room, setRoom, onLeave }: Props) {
       if (room.settings.wordMode === WordMode.Hidden) {
         return (
           <div className="word-prompt guesser-word">
-            <span className="blanks">? ? ?</span>
+            <span className="blanks">?</span>
             <span className="word-len">(Hidden mode)</span>
           </div>
         );
