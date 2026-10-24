@@ -172,6 +172,27 @@ async function run() {
       p3Page.waitForSelector(".game-screen", { timeout: 15000 }),
     ]);
 
+    // Guard: at start of first turn, drawer's page must show >= 1 word button, guessers show none
+    await Promise.race([
+      hostPage.waitForSelector(".word-buttons button.btn-word", { timeout: 10000 }),
+      p2Page.waitForSelector(".word-buttons button.btn-word", { timeout: 10000 }),
+      p3Page.waitForSelector(".word-buttons button.btn-word", { timeout: 10000 }),
+    ]);
+
+    const hostWordBtns = await hostPage.locator(".word-buttons button.btn-word").count();
+    const p2WordBtns = await p2Page.locator(".word-buttons button.btn-word").count();
+    const p3WordBtns = await p3Page.locator(".word-buttons button.btn-word").count();
+
+    const drawerWordBtns = Math.max(hostWordBtns, p2WordBtns, p3WordBtns);
+    const guesserWordBtns = [hostWordBtns, p2WordBtns, p3WordBtns].filter((c) => c !== drawerWordBtns);
+
+    if (drawerWordBtns >= 1 && guesserWordBtns.every((c) => c === 0)) {
+      console.log(`PASS: Drawer shows ${drawerWordBtns} word buttons at start of first turn, guessers show none`);
+    } else {
+      console.error(`FAIL: Word buttons guard failed: host=${hostWordBtns}, p2=${p2WordBtns}, p3=${p3WordBtns}`);
+      process.exit(1);
+    }
+
     const pages = [hostPage, p2Page, p3Page];
 
     async function selectWordIfDrawer() {
