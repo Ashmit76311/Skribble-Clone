@@ -276,4 +276,97 @@ describe("Session Rejoin & Player Identity", () => {
 
     room.resetToLobby();
   });
+
+  test("Reconnect system message timing rules: > 5s offline and 30s cooldown", () => {
+    const player = new Player("sock_1", "Alice");
+
+    // Simulating reconnect check logic:
+    function shouldSendReconnect(p: Player, now: number): boolean {
+      const offlineDuration = p.disconnectedAt ? now - p.disconnectedAt : 0;
+      const timeSinceLastMsg = now - p.lastReconnectedMsgAt;
+      if (offlineDuration > 5_000 && timeSinceLastMsg > 30_000) {
+        p.lastReconnectedMsgAt = now;
+        p.disconnectedAt = null;
+        return true;
+      }
+      p.disconnectedAt = null;
+      return false;
+    }
+
+    const t0 = 100_000;
+    // 1. Quick refresh (offline for 1.5 seconds) -> suppressed
+    player.disconnectedAt = t0;
+    assert.equal(shouldSendReconnect(player, t0 + 1_500), false);
+
+    // 2. Offline for 6 seconds, first time -> sent
+    player.disconnectedAt = t0 + 10_000;
+    assert.equal(shouldSendReconnect(player, t0 + 16_000), true);
+    assert.equal(player.lastReconnectedMsgAt, t0 + 16_000);
+
+    // 3. Disconnects again and offline for 6 seconds, but only 20 seconds since last msg -> suppressed (cooldown)
+    player.disconnectedAt = t0 + 30_000;
+    assert.equal(shouldSendReconnect(player, t0 + 36_000), false);
+
+    // 4. Offline for 6 seconds, 35 seconds since last msg -> sent
+    player.disconnectedAt = t0 + 55_000;
+    assert.equal(shouldSendReconnect(player, t0 + 61_000), true);
+  });
+
+  test("Game over caps currentRound to totalRounds and clears drawer and player flags", () => {
+    const room = new Room("TEST7", {
+      maxPlayers: 8,
+      rounds: 2,
+      drawTime: 80,
+      wordCount: 3,
+      hints: 2,
+      wordMode: WordMode.Normal,
+      isPublic: true,
+    });
+
+    const p1 = new Player("sock_1", "Alice");
+    const p2 = new Player("sock_2", "Bob");
+    room.addPlayer(p1);
+    room.addPlayer(p2);
+
+    const dummyIo = {
+      to: () => ({
+        emit: () => {},
+      }),
+    } as unknown as Server;
+
+    room.startGame(dummyIo);
+    const game = room.game!;
+
+    // Simulate drawing and guessed flags
+    p1.isDrawing = true;
+    p2.hasGuessed = true;
+
+    // Simulate reaching round beyond total rounds (round 3 in a 2-round game)
+    (game as any).round = 3;
+    (game as any).endGame();
+
+    assert.equal(game.currentPhase, GamePhase.GAME_OVER);
+    assert.equal(game.currentRound, 2, "currentRound must not exceed total rounds");
+    assert.equal(game.drawer, undefined, "drawer must be undefined on GAME_OVER");
+
+    const roomData = game.buildRoomData(p1.id);
+    assert.equal(roomData.currentRound, 2, "RoomData currentRound must not exceed total rounds");
+    assert.equal(roomData.currentDrawer, null, "RoomData currentDrawer must be null on GAME_OVER");
+
+    for (const p of roomData.players) {
+      assert.equal(p.isDrawing, false, "Player isDrawing must be false on GAME_OVER");
+      assert.equal(p.hasGuessed, false, "Player hasGuessed must be false on GAME_OVER");
+    }
+
+    // Reset to lobby
+    room.resetToLobby();
+    const lobbyData = room.toJSON();
+    assert.equal(lobbyData.phase, GamePhase.LOBBY);
+    assert.equal(lobbyData.currentDrawer, null);
+    for (const p of lobbyData.players) {
+      assert.equal(p.isDrawing, false, "Player isDrawing must be false in lobby");
+      assert.equal(p.hasGuessed, false, "Player hasGuessed must be false in lobby");
+    }
+  });
 });
+

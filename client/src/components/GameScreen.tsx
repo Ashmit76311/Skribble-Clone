@@ -196,7 +196,13 @@ export default function GameScreen({
           ? {
               ...prev,
               phase: GamePhase.GAME_OVER,
-              players: data.leaderboard,
+              currentDrawer: null,
+              currentRound: Math.min(prev.currentRound, prev.totalRounds),
+              players: (data.leaderboard ?? prev.players).map((p) => ({
+                ...p,
+                isDrawing: false,
+                hasGuessed: false,
+              })),
             }
           : prev
       );
@@ -368,7 +374,7 @@ export default function GameScreen({
       <header className="game-topbar">
         <div className="topbar-left">
           <span className="round-badge">
-            Round {room.currentRound} of {room.totalRounds}
+            Round {Math.min(room.currentRound, room.totalRounds)} of {room.totalRounds}
           </span>
         </div>
         <div className="topbar-center">{renderWordPrompt()}</div>
@@ -385,12 +391,17 @@ export default function GameScreen({
           <h3>Scoreboard</h3>
           <ul className="sidebar-player-list">
             {sortedPlayers.map((p, idx) => {
-              const drawing = p.id === room.currentDrawer;
+              const isGameActive =
+                room.phase !== GamePhase.GAME_OVER &&
+                room.phase !== GamePhase.LOBBY;
+              const drawing =
+                isGameActive && (p.isDrawing || p.id === room.currentDrawer);
+              const guessed = isGameActive && p.hasGuessed;
               return (
                 <li
                   key={p.id}
                   className={`sidebar-player ${drawing ? "active-drawer" : ""} ${
-                    p.hasGuessed ? "player-guessed" : ""
+                    guessed ? "player-guessed" : ""
                   } ${!p.isConnected ? "player-offline" : ""}`}
                 >
                   <div className="player-meta">
@@ -402,7 +413,7 @@ export default function GameScreen({
                   <div className="player-tags">
                     {!p.isConnected && <span className="tag-offline">Offline</span>}
                     {drawing && <span className="tag-drawing">Drawing</span>}
-                    {p.hasGuessed && <span className="tag-guessed">Guessed</span>}
+                    {guessed && <span className="tag-guessed">Guessed</span>}
                     {p.isHost && <span className="host-badge">Host</span>}
                     {p.id === myPlayerId && <span className="you-badge">You</span>}
                   </div>

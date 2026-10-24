@@ -88,10 +88,11 @@ export class Game {
   }
 
   get currentRound() {
-    return this.round;
+    return Math.min(this.round, this.settings.rounds);
   }
 
   get drawer(): Player | undefined {
+    if (this.phase === GamePhase.GAME_OVER) return undefined;
     const id = this.turnOrder[this.turnIndex];
     return this.players.find((p) => p.id === id);
   }
@@ -473,6 +474,9 @@ export class Game {
     this.clearTimer();
     this.clearHintTimers();
     this.phase = GamePhase.GAME_OVER;
+    if (this.round > this.settings.rounds) {
+      this.round = this.settings.rounds;
+    }
     this.endsAt = null;
     this.currentWord = null;
 
@@ -660,7 +664,7 @@ export class Game {
 
     const state: any = {
       phase: this.phase,
-      round: this.round,
+      round: Math.min(this.round, this.settings.rounds),
       totalRounds: this.settings.rounds,
       drawerId: this.drawer?.id ?? null,
       wordLength: canSeeWord
@@ -711,7 +715,7 @@ export class Game {
       settings: this.settings,
       phase: this.phase,
       hostId: host?.id ?? "",
-      currentRound: this.round,
+      currentRound: Math.min(this.round, this.settings.rounds),
       totalRounds: this.settings.rounds,
       currentDrawer: this.drawer?.id ?? null,
       wordLength: canSeeWord

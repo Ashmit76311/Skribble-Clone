@@ -12,6 +12,8 @@ export class Player {
   hasGuessed = false;
   isConnected = true;
   disconnectTimer: NodeJS.Timeout | null = null;
+  disconnectedAt: number | null = null;
+  lastReconnectedMsgAt = 0;
 
   constructor(socketId: string, name: string) {
     this.id = crypto.randomUUID();

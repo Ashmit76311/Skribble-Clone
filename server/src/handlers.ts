@@ -93,6 +93,23 @@ export function registerHandlers(io: Server, manager: RoomManager) {
         player.disconnectTimer = null;
       }
 
+      const now = Date.now();
+      const offlineDuration = player.disconnectedAt ? now - player.disconnectedAt : 0;
+      const timeSinceLastMsg = now - player.lastReconnectedMsgAt;
+
+      // Only send if player was offline for > 5s and don't repeat within 30s
+      if (offlineDuration > 5_000 && timeSinceLastMsg > 30_000) {
+        player.lastReconnectedMsgAt = now;
+        const reconnectedMsg: ChatMessagePayload = {
+          name: "System",
+          text: `${player.name} reconnected`,
+          type: "system",
+        };
+        room.addChatMessage(reconnectedMsg, "all");
+        io.to(room.code).emit(SocketEvent.ChatMessage, reconnectedMsg);
+      }
+      player.disconnectedAt = null;
+
       // Attach new socket connection
       player.socketId = socket.id;
       player.isConnected = true;
@@ -104,15 +121,6 @@ export function registerHandlers(io: Server, manager: RoomManager) {
         : room.toJSON();
       const strokes = room.game ? room.game.currentStrokes : [];
       const chatHistory = room.getChatHistoryForPlayer(player);
-
-      // System notification and broadcast that they are back
-      const reconnectedMsg: ChatMessagePayload = {
-        name: "System",
-        text: `${player.name} reconnected`,
-        type: "system",
-      };
-      room.addChatMessage(reconnectedMsg, "all");
-      io.to(room.code).emit(SocketEvent.ChatMessage, reconnectedMsg);
 
       if (room.game) {
         room.game.broadcastState();
@@ -290,6 +298,7 @@ export function registerHandlers(io: Server, manager: RoomManager) {
 
       // Mark offline, do not remove immediately
       player.isConnected = false;
+      player.disconnectedAt = Date.now();
 
       // Disconnected guessers don't count toward "everyone has guessed"
       if (room.game && room.game.currentPhase === GamePhase.DRAWING) {
