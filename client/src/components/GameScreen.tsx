@@ -8,7 +8,9 @@ import type {
   RoundEndPayload,
   GameOverPayload,
   GameStatePayload,
+  Stroke,
 } from "@skribbl/shared";
+import Canvas from "./Canvas";
 
 interface Props {
   room: RoomData;
@@ -22,6 +24,7 @@ export default function GameScreen({ room, setRoom, onLeave }: Props) {
   const [roundEndScores, setRoundEndScores] = useState<Record<string, number>>({});
   const [gameOverData, setGameOverData] = useState<GameOverPayload | null>(null);
   const [timeLeft, setTimeLeft] = useState(0);
+  const [strokes, setStrokes] = useState<Stroke[]>([]);
 
   useEffect(() => {
     function onRoundStart(data: RoundStartPayload) {
@@ -90,6 +93,9 @@ export default function GameScreen({ room, setRoom, onLeave }: Props) {
 
     function onGameState(data: GameStatePayload) {
       setRoom(data.room);
+      if (data.strokes) {
+        setStrokes(data.strokes);
+      }
     }
 
     socket.on(SocketEvent.RoundStart, onRoundStart);
@@ -213,18 +219,11 @@ export default function GameScreen({ room, setRoom, onLeave }: Props) {
         </aside>
 
         <main className="game-board">
-          <div className="board-placeholder">
-            {room.phase === GamePhase.DRAWING && (
-              <div className="board-status">
-                {isDrawer ? (
-                  <p>You are drawing <strong>{room.word}</strong></p>
-                ) : (
-                  <p>{drawer?.name ?? "Drawer"} is drawing</p>
-                )}
-                <span className="board-hint">Canvas will be implemented in Phase 3</span>
-              </div>
-            )}
-          </div>
+          <Canvas
+            isDrawer={isDrawer}
+            phase={room.phase}
+            initialStrokes={strokes}
+          />
 
           {room.phase === GamePhase.WORD_SELECT && (
             <div className="game-overlay">

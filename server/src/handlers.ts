@@ -1,6 +1,12 @@
 import { Server, Socket } from "socket.io";
 import { SocketEvent } from "@skribbl/shared";
-import type { CreateRoomPayload, JoinRoomPayload, SelectWordPayload } from "@skribbl/shared";
+import type {
+  CreateRoomPayload,
+  JoinRoomPayload,
+  SelectWordPayload,
+  DrawStartPayload,
+  DrawMovePayload,
+} from "@skribbl/shared";
 import { RoomManager } from "./RoomManager.js";
 import { Player } from "./Player.js";
 
@@ -40,6 +46,14 @@ export function registerHandlers(io: Server, manager: RoomManager) {
       });
 
       cb({ room: room.toJSON() });
+
+      if (room.game) {
+        socket.emit(SocketEvent.GameState, {
+          room: room.toJSON(),
+          strokes: room.game.currentStrokes,
+          hint: null,
+        });
+      }
     });
 
     socket.on(SocketEvent.StartGame, () => {
@@ -60,6 +74,36 @@ export function registerHandlers(io: Server, manager: RoomManager) {
       if (!room || !room.game) return;
       if (!data?.word) return;
       room.game.chooseWord(socket.id, data.word);
+    });
+
+    socket.on(SocketEvent.DrawStart, (data: DrawStartPayload) => {
+      const room = manager.getRoomForSocket(socket.id);
+      if (!room || !room.game) return;
+      room.game.handleDrawStart(socket.id, data);
+    });
+
+    socket.on(SocketEvent.DrawMove, (data: DrawMovePayload) => {
+      const room = manager.getRoomForSocket(socket.id);
+      if (!room || !room.game) return;
+      room.game.handleDrawMove(socket.id, data);
+    });
+
+    socket.on(SocketEvent.DrawEnd, () => {
+      const room = manager.getRoomForSocket(socket.id);
+      if (!room || !room.game) return;
+      room.game.handleDrawEnd(socket.id);
+    });
+
+    socket.on(SocketEvent.CanvasClear, () => {
+      const room = manager.getRoomForSocket(socket.id);
+      if (!room || !room.game) return;
+      room.game.handleClear(socket.id);
+    });
+
+    socket.on(SocketEvent.DrawUndo, () => {
+      const room = manager.getRoomForSocket(socket.id);
+      if (!room || !room.game) return;
+      room.game.handleUndo(socket.id);
     });
 
     socket.on(SocketEvent.EndTurn, () => {

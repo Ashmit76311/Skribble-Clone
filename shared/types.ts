@@ -76,18 +76,30 @@ export interface ChatPayload {
   text: string;
 }
 
-export interface DrawMovePayload {
-  point: Point;
+export interface DrawStartPayload {
+  x: number;
+  y: number;
   color: string;
   size: number;
   tool: "brush" | "eraser";
 }
 
-export interface DrawStartPayload {
-  point: Point;
-  color: string;
-  size: number;
-  tool: "brush" | "eraser";
+export interface DrawMovePayload {
+  x: number;
+  y: number;
+}
+
+export interface DrawDataPayload {
+  type: "start" | "move" | "end";
+  x?: number;
+  y?: number;
+  color?: string;
+  size?: number;
+  tool?: "brush" | "eraser";
+}
+
+export interface DrawUndoPayload {
+  strokes: Stroke[];
 }
 
 export interface RoundStartPayload {

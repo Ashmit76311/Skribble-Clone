@@ -47,7 +47,7 @@ export class Room {
 
   addPlayer(player: Player): string | null {
     if (this.players.length >= this.settings.maxPlayers) return "Room is full";
-    if (this.phase !== GamePhase.LOBBY) return "Game already in progress";
+    if (this.phase === GamePhase.GAME_OVER) return "Game is over";
     if (this.players.some((p) => p.name === player.name))
       return "Name already taken";
     this.players.push(player);

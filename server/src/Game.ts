@@ -1,6 +1,6 @@
 import { Server } from "socket.io";
 import { GamePhase, SocketEvent } from "@skribbl/shared";
-import type { RoomSettings } from "@skribbl/shared";
+import type { RoomSettings, Stroke, Point, DrawStartPayload, DrawMovePayload } from "@skribbl/shared";
 import { Player } from "./Player.js";
 import words from "../words.json" with { type: "json" };
 
@@ -32,6 +32,9 @@ export class Game {
   private timer: ReturnType<typeof setTimeout> | null = null;
   private endsAt: number | null = null;
   private onEnd: () => void;
+  private strokes: Stroke[] = [];
+  private pendingStroke: Stroke | null = null;
+  private lastDrawMoveTime = 0;
 
   constructor(
     io: Server,
@@ -79,6 +82,8 @@ export class Game {
   private startTurn() {
     this.phase = GamePhase.WORD_SELECT;
     this.currentWord = null;
+    this.strokes = [];
+    this.pendingStroke = null;
 
     this.players.forEach((p) => {
       p.isDrawing = false;
@@ -273,6 +278,96 @@ export class Game {
     this.clearTimer();
   }
 
+  get currentStrokes() {
+    return this.strokes;
+  }
+
+  handleDrawStart(playerId: string, data: DrawStartPayload) {
+    if (this.phase !== GamePhase.DRAWING) return false;
+    if (this.drawer?.id !== playerId) return false;
+    if (!data || !this.validateCoord(data.x) || !this.validateCoord(data.y)) return false;
+    if (!this.validateColor(data.color)) return false;
+    if (!this.validateSize(data.size)) return false;
+    if (data.tool !== "brush" && data.tool !== "eraser") return false;
+
+    this.pendingStroke = {
+      points: [{ x: data.x, y: data.y }],
+      color: data.color,
+      size: data.size,
+      tool: data.tool,
+    };
+    this.io.to(this.roomCode).emit(SocketEvent.DrawData, {
+      type: "start",
+      x: data.x,
+      y: data.y,
+      color: data.color,
+      size: data.size,
+      tool: data.tool,
+    });
+    return true;
+  }
+
+  handleDrawMove(playerId: string, data: DrawMovePayload) {
+    if (this.phase !== GamePhase.DRAWING) return false;
+    if (this.drawer?.id !== playerId) return false;
+    if (!this.pendingStroke) return false;
+    if (!data || !this.validateCoord(data.x) || !this.validateCoord(data.y)) return false;
+
+    const now = Date.now();
+    if (now - this.lastDrawMoveTime < 10) return false;
+    this.lastDrawMoveTime = now;
+
+    this.pendingStroke.points.push({ x: data.x, y: data.y });
+    this.io.to(this.roomCode).emit(SocketEvent.DrawData, {
+      type: "move",
+      x: data.x,
+      y: data.y,
+    });
+    return true;
+  }
+
+  handleDrawEnd(playerId: string) {
+    if (this.drawer?.id !== playerId) return false;
+    if (!this.pendingStroke) return false;
+
+    this.strokes.push(this.pendingStroke);
+    this.pendingStroke = null;
+    this.io.to(this.roomCode).emit(SocketEvent.DrawData, { type: "end" });
+    return true;
+  }
+
+  handleClear(playerId: string) {
+    if (this.phase !== GamePhase.DRAWING) return false;
+    if (this.drawer?.id !== playerId) return false;
+
+    this.strokes = [];
+    this.pendingStroke = null;
+    this.io.to(this.roomCode).emit(SocketEvent.CanvasClear);
+    return true;
+  }
+
+  handleUndo(playerId: string) {
+    if (this.phase !== GamePhase.DRAWING) return false;
+    if (this.drawer?.id !== playerId) return false;
+    if (this.strokes.length === 0) return false;
+
+    this.strokes.pop();
+    this.io.to(this.roomCode).emit(SocketEvent.DrawUndo, { strokes: this.strokes });
+    return true;
+  }
+
+  private validateCoord(v: number) {
+    return typeof v === "number" && v >= 0 && v <= 1;
+  }
+
+  private validateColor(c: string) {
+    return typeof c === "string" && /^#[0-9a-f]{6}$/i.test(c);
+  }
+
+  private validateSize(s: number) {
+    return typeof s === "number" && s >= 1 && s <= 50;
+  }
+
   getStateForPlayer(playerId: string) {
     const isDrawer = this.drawer?.id === playerId;
     return {
@@ -291,7 +386,7 @@ export class Game {
     for (const p of this.players) {
       this.io.to(p.id).emit(SocketEvent.GameState, {
         room: this.buildRoomData(p.id),
-        strokes: [],
+        strokes: this.strokes,
         hint: null,
       });
     }
