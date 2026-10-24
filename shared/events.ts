@@ -26,4 +26,5 @@ export enum SocketEvent {
   Timer = "timer",
   PlayAgain = "play_again",
   EndTurn = "end_turn",
+  RejoinRoom = "rejoin_room",
 }

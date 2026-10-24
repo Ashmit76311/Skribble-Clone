@@ -18,26 +18,62 @@ import Canvas from "./Canvas";
 interface Props {
   room: RoomData;
   setRoom: React.Dispatch<React.SetStateAction<RoomData | null>>;
+  myPlayerId: string;
+  initialStrokes?: Stroke[];
+  initialMessages?: ChatMessagePayload[];
+  initialWordOptions?: string[];
   onLeave: () => void;
 }
 
-export default function GameScreen({ room, setRoom, onLeave }: Props) {
-  const [wordOptions, setWordOptions] = useState<string[]>([]);
+export default function GameScreen({
+  room,
+  setRoom,
+  myPlayerId,
+  initialStrokes,
+  initialMessages,
+  initialWordOptions,
+  onLeave,
+}: Props) {
+  const [wordOptions, setWordOptions] = useState<string[]>(initialWordOptions ?? []);
   const [roundEndWord, setRoundEndWord] = useState<string | null>(null);
   const [roundEndScores, setRoundEndScores] = useState<Record<string, number>>({});
   const [roundEndTurnPoints, setRoundEndTurnPoints] = useState<Record<string, number>>({});
   const [gameOverData, setGameOverData] = useState<GameOverPayload | null>(null);
   const [timeLeft, setTimeLeft] = useState(0);
-  const [strokes, setStrokes] = useState<Stroke[]>([]);
+  const [strokes, setStrokes] = useState<Stroke[]>(initialStrokes ?? []);
   const [maskedHint, setMaskedHint] = useState<string | null>(room.hint ?? null);
 
-  const [messages, setMessages] = useState<ChatMessagePayload[]>([]);
+  const [messages, setMessages] = useState<ChatMessagePayload[]>(initialMessages ?? []);
   const [chatInput, setChatInput] = useState("");
   const chatBottomRef = useRef<HTMLDivElement>(null);
 
   const isDebug =
     import.meta.env.VITE_DEBUG === "true" ||
     localStorage.getItem("debug") === "true";
+
+  useEffect(() => {
+    if (initialStrokes && initialStrokes.length > 0) {
+      setStrokes(initialStrokes);
+    }
+  }, [initialStrokes]);
+
+  useEffect(() => {
+    if (initialMessages && initialMessages.length > 0) {
+      setMessages(initialMessages);
+    }
+  }, [initialMessages]);
+
+  useEffect(() => {
+    if (initialWordOptions && initialWordOptions.length > 0) {
+      setWordOptions(initialWordOptions);
+    }
+  }, [initialWordOptions]);
+
+  useEffect(() => {
+    if (room.hint) {
+      setMaskedHint(room.hint);
+    }
+  }, [room.hint]);
 
   useEffect(() => {
     chatBottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -190,9 +226,9 @@ export default function GameScreen({ room, setRoom, onLeave }: Props) {
     return () => clearInterval(timer);
   }, [room.endsAt]);
 
-  const isDrawer = room.currentDrawer === socket.id;
-  const isHost = room.hostId === socket.id;
-  const me = room.players.find((p) => p.id === socket.id);
+  const isDrawer = room.currentDrawer === myPlayerId;
+  const isHost = room.hostId === myPlayerId;
+  const me = room.players.find((p) => p.id === myPlayerId);
   const hasGuessed = me?.hasGuessed ?? false;
   const drawer = room.players.find((p) => p.id === room.currentDrawer);
 
@@ -328,7 +364,7 @@ export default function GameScreen({ room, setRoom, onLeave }: Props) {
                   key={p.id}
                   className={`sidebar-player ${drawing ? "active-drawer" : ""} ${
                     p.hasGuessed ? "player-guessed" : ""
-                  }`}
+                  } ${!p.isConnected ? "player-offline" : ""}`}
                 >
                   <div className="player-meta">
                     <span className="player-name">
@@ -337,10 +373,11 @@ export default function GameScreen({ room, setRoom, onLeave }: Props) {
                     <span className="player-score">{p.score} pts</span>
                   </div>
                   <div className="player-tags">
+                    {!p.isConnected && <span className="tag-offline">Offline</span>}
                     {drawing && <span className="tag-drawing">Drawing</span>}
                     {p.hasGuessed && <span className="tag-guessed">Guessed</span>}
                     {p.isHost && <span className="host-badge">Host</span>}
-                    {p.id === socket.id && <span className="you-badge">You</span>}
+                    {p.id === myPlayerId && <span className="you-badge">You</span>}
                   </div>
                 </li>
               );

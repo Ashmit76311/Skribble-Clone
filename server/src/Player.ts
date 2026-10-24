@@ -1,15 +1,22 @@
 import { PlayerData } from "@skribbl/shared";
+import crypto from "crypto";
 
 export class Player {
   id: string;
+  token: string;
+  socketId: string;
   name: string;
   score = 0;
   isHost = false;
   isDrawing = false;
   hasGuessed = false;
+  isConnected = true;
+  disconnectTimer: NodeJS.Timeout | null = null;
 
-  constructor(id: string, name: string) {
-    this.id = id;
+  constructor(socketId: string, name: string) {
+    this.id = crypto.randomUUID();
+    this.token = crypto.randomUUID();
+    this.socketId = socketId;
     this.name = name;
   }
 
@@ -21,7 +28,7 @@ export class Player {
       isHost: this.isHost,
       isDrawing: this.isDrawing,
       hasGuessed: this.hasGuessed,
-      isConnected: true,
+      isConnected: this.isConnected,
     };
   }
 }

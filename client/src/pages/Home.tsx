@@ -59,7 +59,15 @@ export default function Home() {
     if (!n) return;
     socket.emit(SocketEvent.CreateRoom, { name: n, settings }, (res: any) => {
       if (res.error) return addToast(res.error);
-      navigate(`/room/${res.room.code}`, { state: { room: res.room } });
+      if (res.token) {
+        sessionStorage.setItem(
+          `session_${res.room.code.toUpperCase()}`,
+          JSON.stringify({ code: res.room.code, token: res.token, playerId: res.playerId })
+        );
+      }
+      navigate(`/room/${res.room.code}`, {
+        state: { room: res.room, playerId: res.playerId },
+      });
     });
   }
 
@@ -68,7 +76,15 @@ export default function Home() {
     if (!n) return;
     socket.emit(SocketEvent.JoinRoom, { name: n, code }, (res: any) => {
       if (res.error) return addToast(res.error);
-      navigate(`/room/${res.room.code}`, { state: { room: res.room } });
+      if (res.token) {
+        sessionStorage.setItem(
+          `session_${res.room.code.toUpperCase()}`,
+          JSON.stringify({ code: res.room.code, token: res.token, playerId: res.playerId })
+        );
+      }
+      navigate(`/room/${res.room.code}`, {
+        state: { room: res.room, playerId: res.playerId },
+      });
     });
   }
 

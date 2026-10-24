@@ -255,6 +255,21 @@ body {
   font-weight: 600;
 }
 
+.offline-badge,
+.tag-offline {
+  font-size: 0.65rem;
+  padding: 0.1rem 0.4rem;
+  background: #555566;
+  color: #bbbbcc;
+  border-radius: 4px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.sidebar-player.player-offline {
+  opacity: 0.55;
+}
+
 .settings-summary .settings-info {
   display: flex;
   flex-wrap: wrap;

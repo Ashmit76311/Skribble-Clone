@@ -1,5 +1,5 @@
 import { Server } from "socket.io";
-import { GamePhase, RoomData, RoomSettings, WordMode } from "@skribbl/shared";
+import { GamePhase, RoomData, RoomSettings, WordMode, ChatMessagePayload } from "@skribbl/shared";
 import { Player } from "./Player.js";
 import { Game } from "./Game.js";
 
@@ -29,12 +29,18 @@ export function generateCode(): string {
   return code;
 }
 
+export interface StoredChatMessage {
+  msg: ChatMessagePayload;
+  visibility: "all" | "non_guessers" | "drawer_or_guessed";
+}
+
 export class Room {
   code: string;
   players: Player[] = [];
   settings: RoomSettings;
   phase = GamePhase.LOBBY;
   game: Game | null = null;
+  chatHistory: StoredChatMessage[] = [];
 
   constructor(code: string, settings: RoomSettings) {
     this.code = code;
@@ -43,6 +49,48 @@ export class Room {
 
   get host(): Player | undefined {
     return this.players.find((p) => p.isHost);
+  }
+
+  getPlayerByToken(token: string): Player | undefined {
+    return this.players.find((p) => p.token === token);
+  }
+
+  getPlayerById(id: string): Player | undefined {
+    return this.players.find((p) => p.id === id);
+  }
+
+  getPlayerBySocketId(socketId: string): Player | undefined {
+    return this.players.find((p) => p.socketId === socketId);
+  }
+
+  addChatMessage(
+    msg: ChatMessagePayload,
+    visibility: "all" | "non_guessers" | "drawer_or_guessed" = "all"
+  ) {
+    this.chatHistory.push({ msg, visibility });
+    if (this.chatHistory.length > 200) {
+      this.chatHistory.shift();
+    }
+  }
+
+  getChatHistoryForPlayer(player: Player): ChatMessagePayload[] {
+    const isDrawer = this.game?.drawer?.id === player.id;
+    const hasGuessed = player.hasGuessed;
+    const isDrawingPhase = this.game?.currentPhase === GamePhase.DRAWING;
+
+    const visible = this.chatHistory.filter((item) => {
+      if (item.visibility === "all") return true;
+      if (!isDrawingPhase) return true;
+      if (item.visibility === "drawer_or_guessed") {
+        return isDrawer || hasGuessed;
+      }
+      if (item.visibility === "non_guessers") {
+        return !isDrawer && !hasGuessed;
+      }
+      return true;
+    });
+
+    return visible.slice(-50).map((item) => item.msg);
   }
 
   addPlayer(player: Player): string | null {
@@ -59,6 +107,10 @@ export class Room {
     const idx = this.players.findIndex((p) => p.id === id);
     if (idx === -1) return null;
     const [player] = this.players.splice(idx, 1);
+    if (player.disconnectTimer) {
+      clearTimeout(player.disconnectTimer);
+      player.disconnectTimer = null;
+    }
     if (player.isHost && this.players.length > 0) {
       this.players[0].isHost = true;
     }
@@ -68,19 +120,38 @@ export class Room {
     return player;
   }
 
+  clearAllTimers() {
+    for (const p of this.players) {
+      if (p.disconnectTimer) {
+        clearTimeout(p.disconnectTimer);
+        p.disconnectTimer = null;
+      }
+    }
+  }
+
   startGame(io: Server): string | null {
     if (this.players.length < 2) return "Need at least 2 players";
     if (this.phase !== GamePhase.LOBBY) return "Game already in progress";
 
-    this.game = new Game(io, this.code, this.settings, this.players, () => {
-      this.phase = GamePhase.GAME_OVER;
-    });
+    this.game = new Game(
+      io,
+      this.code,
+      this.settings,
+      this.players,
+      () => {
+        this.phase = GamePhase.GAME_OVER;
+      },
+      (msg, visibility) => {
+        this.addChatMessage(msg, visibility);
+      }
+    );
     this.phase = GamePhase.WORD_SELECT;
     this.game.start();
     return null;
   }
 
   resetToLobby() {
+    this.clearAllTimers();
     if (this.game) {
       this.game.destroy();
       this.game = null;

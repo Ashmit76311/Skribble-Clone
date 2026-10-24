@@ -19,6 +19,10 @@ export class RoomManager {
   }
 
   deleteRoom(code: string) {
+    const room = this.rooms.get(code);
+    if (room) {
+      room.clearAllTimers();
+    }
     this.rooms.delete(code);
   }
 

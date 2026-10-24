@@ -181,3 +181,33 @@ export interface PlayerLeftPayload {
   name: string;
   players: PlayerData[];
 }
+
+export interface RejoinRoomPayload {
+  code: string;
+  token: string;
+}
+
+export interface RejoinRoomResponse {
+  room?: RoomData;
+  strokes?: Stroke[];
+  hasGuessed?: boolean;
+  chatHistory?: ChatMessagePayload[];
+  playerId?: string;
+  token?: string;
+  wordOptions?: string[];
+  error?: string;
+}
+
+export interface CreateRoomResponse {
+  room?: RoomData;
+  token?: string;
+  playerId?: string;
+  error?: string;
+}
+
+export interface JoinRoomResponse {
+  room?: RoomData;
+  token?: string;
+  playerId?: string;
+  error?: string;
+}

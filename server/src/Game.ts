@@ -6,6 +6,7 @@ import type {
   DrawStartPayload,
   DrawMovePayload,
   ChatMessagePayload,
+  RoomData,
 } from "@skribbl/shared";
 import { Player } from "./Player.js";
 import words from "../words.json" with { type: "json" };
@@ -51,6 +52,10 @@ export class Game {
   private hintTimers: ReturnType<typeof setTimeout>[] = [];
   private endsAt: number | null = null;
   private onEnd: () => void;
+  private onChatMessage?: (
+    msg: ChatMessagePayload,
+    visibility: "all" | "non_guessers" | "drawer_or_guessed"
+  ) => void;
   private strokes: Stroke[] = [];
   private pendingStroke: Stroke | null = null;
   private lastDrawMoveTime = 0;
@@ -63,13 +68,18 @@ export class Game {
     roomCode: string,
     settings: RoomSettings,
     players: Player[],
-    onEnd: () => void
+    onEnd: () => void,
+    onChatMessage?: (
+      msg: ChatMessagePayload,
+      visibility: "all" | "non_guessers" | "drawer_or_guessed"
+    ) => void
   ) {
     this.io = io;
     this.roomCode = roomCode;
     this.settings = settings;
     this.players = players;
     this.onEnd = onEnd;
+    this.onChatMessage = onChatMessage;
     this.wordPool = allWords();
   }
 
@@ -95,6 +105,10 @@ export class Game {
       return this.hintManager.getWordLengthForDisplay();
     }
     return this.currentWord?.length ?? null;
+  }
+
+  get wordOptionsList(): string[] {
+    return this.wordOptions;
   }
 
   start() {
@@ -141,12 +155,14 @@ export class Game {
 
     this.endsAt = Date.now() + WORD_SELECT_TIME;
 
-    this.io.to(drawer.id).emit(SocketEvent.RoundStart, {
-      round: this.round,
-      drawerId: drawer.id,
-      endsAt: this.endsAt,
-      wordOptions: this.wordOptions,
-    });
+    if (drawer.isConnected && drawer.socketId) {
+      this.io.to(drawer.socketId).emit(SocketEvent.RoundStart, {
+        round: this.round,
+        drawerId: drawer.id,
+        endsAt: this.endsAt,
+        wordOptions: this.wordOptions,
+      });
+    }
 
     this.broadcast(
       SocketEvent.RoundStart,
@@ -214,8 +230,8 @@ export class Game {
       this.drawer?.id
     );
 
-    if (this.drawer) {
-      this.io.to(this.drawer.id).emit(SocketEvent.WordChosen, {
+    if (this.drawer && this.drawer.isConnected && this.drawer.socketId) {
+      this.io.to(this.drawer.socketId).emit(SocketEvent.WordChosen, {
         wordLength: drawerDisplayLength,
         endsAt: this.endsAt,
         word,
@@ -230,8 +246,13 @@ export class Game {
 
   private broadcastHint(hint: string) {
     for (const p of this.players) {
-      if (p.id !== this.drawer?.id && !p.hasGuessed) {
-        this.io.to(p.id).emit(SocketEvent.HintUpdate, { hint });
+      if (
+        p.id !== this.drawer?.id &&
+        !p.hasGuessed &&
+        p.isConnected &&
+        p.socketId
+      ) {
+        this.io.to(p.socketId).emit(SocketEvent.HintUpdate, { hint });
       }
     }
   }
@@ -241,6 +262,19 @@ export class Game {
     const word =
       this.wordOptions[Math.floor(Math.random() * this.wordOptions.length)];
     if (this.drawer) this.chooseWord(this.drawer.id, word);
+  }
+
+  checkAllGuessed() {
+    if (this.phase !== GamePhase.DRAWING) return;
+    const activeNonDrawers = this.players.filter(
+      (p) => p.id !== this.drawer?.id && p.isConnected
+    );
+    if (
+      activeNonDrawers.length > 0 &&
+      activeNonDrawers.every((p) => p.hasGuessed)
+    ) {
+      this.endTurn();
+    }
   }
 
   handleGuess(playerId: string, rawText: string) {
@@ -280,41 +314,44 @@ export class Game {
         scores,
       });
 
-      this.io.to(this.roomCode).emit(SocketEvent.ChatMessage, {
+      const sysMsg: ChatMessagePayload = {
         name: "System",
         text: `${player.name} guessed the word!`,
         type: "correct",
-      });
+      };
+      this.onChatMessage?.(sysMsg, "all");
+      this.io.to(this.roomCode).emit(SocketEvent.ChatMessage, sysMsg);
 
       // Show full word to the player who guessed
-      this.io.to(player.id).emit(SocketEvent.WordChosen, {
-        wordLength: this.currentWord.length,
-        endsAt: this.endsAt!,
-        word: this.currentWord,
-        hint: this.currentWord,
-      });
+      if (player.isConnected && player.socketId) {
+        this.io.to(player.socketId).emit(SocketEvent.WordChosen, {
+          wordLength: this.currentWord.length,
+          endsAt: this.endsAt!,
+          word: this.currentWord,
+          hint: this.currentWord,
+        });
+      }
 
       this.broadcastState();
-
-      // Check if all non-drawers have guessed
-      const nonDrawers = this.players.filter((p) => p.id !== this.drawer?.id);
-      if (nonDrawers.length > 0 && nonDrawers.every((p) => p.hasGuessed)) {
-        this.endTurn();
-      }
+      this.checkAllGuessed();
     } else if (isCloseGuess(text, this.currentWord)) {
-      this.io.to(player.id).emit(SocketEvent.ChatMessage, {
-        name: "System",
-        text: `'${text}' is close!`,
-        type: "close",
-      });
+      if (player.isConnected && player.socketId) {
+        this.io.to(player.socketId).emit(SocketEvent.ChatMessage, {
+          name: "System",
+          text: `'${text}' is close!`,
+          type: "close",
+        });
+      }
     } else {
       // Don't leak secret word if typed in wrong guess
       if (containsSecretWord(text, this.currentWord)) {
-        this.io.to(player.id).emit(SocketEvent.ChatMessage, {
-          name: "System",
-          text: "Your message contains the secret word and was blocked!",
-          type: "close",
-        });
+        if (player.isConnected && player.socketId) {
+          this.io.to(player.socketId).emit(SocketEvent.ChatMessage, {
+            name: "System",
+            text: "Your message contains the secret word and was blocked!",
+            type: "close",
+          });
+        }
         return;
       }
 
@@ -325,10 +362,17 @@ export class Game {
         type: "guess",
       };
 
+      this.onChatMessage?.(msg, "non_guessers");
+
       // Broadcast wrong guesses only to non-guessers
       for (const p of this.players) {
-        if (!p.hasGuessed && p.id !== this.drawer?.id) {
-          this.io.to(p.id).emit(SocketEvent.ChatMessage, msg);
+        if (
+          !p.hasGuessed &&
+          p.id !== this.drawer?.id &&
+          p.isConnected &&
+          p.socketId
+        ) {
+          this.io.to(p.socketId).emit(SocketEvent.ChatMessage, msg);
         }
       }
     }
@@ -341,12 +385,14 @@ export class Game {
     if (!text || text.length > 200) return;
 
     if (this.phase !== GamePhase.DRAWING) {
-      this.io.to(this.roomCode).emit(SocketEvent.ChatMessage, {
+      const msg: ChatMessagePayload = {
         playerId: player.id,
         name: player.name,
         text,
         type: "chat",
-      });
+      };
+      this.onChatMessage?.(msg, "all");
+      this.io.to(this.roomCode).emit(SocketEvent.ChatMessage, msg);
       return;
     }
 
@@ -361,9 +407,14 @@ export class Game {
         text,
         type: "chat",
       };
+      this.onChatMessage?.(msg, "drawer_or_guessed");
       for (const p of this.players) {
-        if (p.id === this.drawer?.id || p.hasGuessed) {
-          this.io.to(p.id).emit(SocketEvent.ChatMessage, msg);
+        if (
+          (p.id === this.drawer?.id || p.hasGuessed) &&
+          p.isConnected &&
+          p.socketId
+        ) {
+          this.io.to(p.socketId).emit(SocketEvent.ChatMessage, msg);
         }
       }
     } else {
@@ -624,18 +675,20 @@ export class Game {
     };
   }
 
-  private broadcastState() {
+  public broadcastState() {
     for (const p of this.players) {
-      const roomData = this.buildRoomData(p.id);
-      this.io.to(p.id).emit(SocketEvent.GameState, {
-        room: roomData,
-        strokes: this.strokes,
-        hint: roomData.hint ?? null,
-      });
+      if (p.isConnected && p.socketId) {
+        const roomData = this.buildRoomData(p.id);
+        this.io.to(p.socketId).emit(SocketEvent.GameState, {
+          room: roomData,
+          strokes: this.strokes,
+          hint: roomData.hint ?? null,
+        });
+      }
     }
   }
 
-  buildRoomData(forPlayerId: string) {
+  buildRoomData(forPlayerId: string): RoomData {
     const host = this.players.find((p) => p.isHost);
     const player = this.players.find((p) => p.id === forPlayerId);
     const isDrawer = this.drawer?.id === forPlayerId;
@@ -668,8 +721,8 @@ export class Game {
 
   private broadcast(event: string, data: unknown, excludeId?: string) {
     for (const p of this.players) {
-      if (p.id !== excludeId) {
-        this.io.to(p.id).emit(event, data);
+      if (p.id !== excludeId && p.isConnected && p.socketId) {
+        this.io.to(p.socketId).emit(event, data);
       }
     }
   }

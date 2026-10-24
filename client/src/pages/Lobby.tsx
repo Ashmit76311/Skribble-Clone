@@ -1,4 +1,4 @@
-import { useEffect, useState, FormEvent } from "react";
+import { useEffect, useState, FormEvent, useRef } from "react";
 import { useParams, useLocation, useNavigate } from "react-router-dom";
 import { socket } from "../socket";
 import { GamePhase, SocketEvent } from "@skribbl/shared";
@@ -10,9 +10,33 @@ import type {
   GameStatePayload,
   RoundStartPayload,
   ErrorPayload,
+  Stroke,
+  ChatMessagePayload,
+  RejoinRoomResponse,
 } from "@skribbl/shared";
 import { useToast, ToastContainer } from "../components/Toast";
 import GameScreen from "../components/GameScreen";
+
+function getStoredSession(code: string): { code: string; token: string; playerId: string } | null {
+  try {
+    const raw = sessionStorage.getItem(`session_${code.toUpperCase()}`);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+function setStoredSession(code: string, token: string, playerId: string) {
+  sessionStorage.setItem(
+    `session_${code.toUpperCase()}`,
+    JSON.stringify({ code, token, playerId })
+  );
+}
+
+function clearStoredSession(code: string) {
+  sessionStorage.removeItem(`session_${code.toUpperCase()}`);
+}
 
 export default function Lobby() {
   const { code } = useParams<{ code: string }>();
@@ -20,23 +44,99 @@ export default function Lobby() {
   const navigate = useNavigate();
   const { toasts, addToast } = useToast();
 
-  const [room, setRoom] = useState<RoomData | null>(
-    (location.state as any)?.room ?? null
-  );
+  const [room, setRoom] = useState<RoomData | null>(null);
+  const [myPlayerId, setMyPlayerId] = useState<string>(() => {
+    const session = code ? getStoredSession(code) : null;
+    return (location.state as any)?.playerId ?? session?.playerId ?? "";
+  });
   const [name, setName] = useState(() => localStorage.getItem("name") || "");
   const [needsName, setNeedsName] = useState(false);
 
-  useEffect(() => {
-    if (room) return;
+  const [initialStrokes, setInitialStrokes] = useState<Stroke[]>([]);
+  const [initialMessages, setInitialMessages] = useState<ChatMessagePayload[]>([]);
+  const [initialWordOptions, setInitialWordOptions] = useState<string[]>([]);
+  const joinedRef = useRef(false);
 
-    // opened via invite link — need to join
-    const saved = localStorage.getItem("name");
-    if (saved) {
-      joinRoom(saved);
+  function performRejoin(token: string) {
+    socket.emit(
+      SocketEvent.RejoinRoom,
+      { code: code!, token },
+      (res: RejoinRoomResponse) => {
+        if (res.error) {
+          clearStoredSession(code!);
+          const saved = localStorage.getItem("name");
+          if (saved) {
+            joinRoom(saved);
+          } else {
+            setNeedsName(true);
+          }
+          return;
+        }
+
+        if (res.playerId) {
+          setMyPlayerId(res.playerId);
+          setStoredSession(code!, res.token || token, res.playerId);
+        }
+        if (res.room) setRoom(res.room);
+        if (res.strokes) setInitialStrokes(res.strokes);
+        if (res.chatHistory) setInitialMessages(res.chatHistory);
+        if (res.wordOptions) setInitialWordOptions(res.wordOptions);
+        setNeedsName(false);
+      }
+    );
+  }
+
+  function joinRoom(playerName: string) {
+    socket.emit(
+      SocketEvent.JoinRoom,
+      { name: playerName, code: code! },
+      (res: any) => {
+        if (res.error) {
+          addToast(res.error);
+          setTimeout(() => navigate("/"), 2000);
+          return;
+        }
+        if (res.token) {
+          setStoredSession(code!, res.token, res.playerId);
+        }
+        setMyPlayerId(res.playerId);
+        setRoom(res.room);
+        setNeedsName(false);
+      }
+    );
+  }
+
+  useEffect(() => {
+    const session = code ? getStoredSession(code) : null;
+
+    if (session?.token) {
+      performRejoin(session.token);
+    } else if ((location.state as any)?.room) {
+      setRoom((location.state as any).room);
+      if ((location.state as any)?.playerId) {
+        setMyPlayerId((location.state as any).playerId);
+      }
     } else {
-      setNeedsName(true);
+      const saved = localStorage.getItem("name");
+      if (saved) {
+        joinRoom(saved);
+      } else {
+        setNeedsName(true);
+      }
     }
-  }, []);
+
+    function handleConnect() {
+      const activeSession = code ? getStoredSession(code) : null;
+      if (activeSession?.token) {
+        performRejoin(activeSession.token);
+      }
+    }
+
+    socket.on("connect", handleConnect);
+    return () => {
+      socket.off("connect", handleConnect);
+    };
+  }, [code]);
 
   useEffect(() => {
     socket.on(SocketEvent.PlayerJoined, onPlayerJoined);
@@ -101,22 +201,6 @@ export default function Lobby() {
     addToast(data.message);
   }
 
-  function joinRoom(playerName: string) {
-    socket.emit(
-      SocketEvent.JoinRoom,
-      { name: playerName, code: code! },
-      (res: any) => {
-        if (res.error) {
-          addToast(res.error);
-          setTimeout(() => navigate("/"), 2000);
-          return;
-        }
-        setRoom(res.room);
-        setNeedsName(false);
-      }
-    );
-  }
-
   function handleNameSubmit(e: FormEvent) {
     e.preventDefault();
     const trimmed = name.trim();
@@ -135,12 +219,13 @@ export default function Lobby() {
   }
 
   function leaveRoom() {
+    if (code) clearStoredSession(code);
     socket.disconnect();
     socket.connect();
     navigate("/");
   }
 
-  const isHost = room?.hostId === socket.id;
+  const isHost = room?.hostId === myPlayerId;
   const canStart = isHost && (room?.players.length ?? 0) >= 2;
 
   if (needsName) {
@@ -181,7 +266,15 @@ export default function Lobby() {
   if (room.phase !== GamePhase.LOBBY) {
     return (
       <>
-        <GameScreen room={room} setRoom={setRoom} onLeave={leaveRoom} />
+        <GameScreen
+          room={room}
+          setRoom={setRoom}
+          myPlayerId={myPlayerId}
+          initialStrokes={initialStrokes}
+          initialMessages={initialMessages}
+          initialWordOptions={initialWordOptions}
+          onLeave={leaveRoom}
+        />
         <ToastContainer toasts={toasts} />
       </>
     );
@@ -207,8 +300,9 @@ export default function Lobby() {
           {room.players.map((p) => (
             <li key={p.id} className="player-item">
               <span>{p.name}</span>
+              {!p.isConnected && <span className="offline-badge">offline</span>}
               {p.isHost && <span className="host-badge">host</span>}
-              {p.id === socket.id && <span className="you-badge">you</span>}
+              {p.id === myPlayerId && <span className="you-badge">you</span>}
             </li>
           ))}
         </ul>
