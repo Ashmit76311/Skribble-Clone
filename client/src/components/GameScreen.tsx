@@ -144,8 +144,8 @@ export default function GameScreen({ room, setRoom, onLeave }: Props) {
         return (
           <div className="word-prompt drawer-word">
             <span>Word: <strong>{room.word}</strong></span>
-            <button className="btn btn-sm btn-debug" onClick={endTurn}>
-              End turn
+            <button className="btn btn-sm btn-debug" onClick={endTurn} title="Debug button - will be removed in cleanup">
+              [DEBUG] End turn
             </button>
           </div>
         );
