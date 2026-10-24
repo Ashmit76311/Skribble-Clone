@@ -1,0 +1,31 @@
+{
+  "animals": [
+    "dog", "cat", "elephant", "giraffe", "penguin", "dolphin", "eagle", "shark",
+    "tiger", "lion", "bear", "wolf", "fox", "rabbit", "deer", "horse", "monkey",
+    "snake", "frog", "turtle", "owl", "parrot", "whale", "octopus", "butterfly",
+    "bee", "ant", "spider", "crab", "lobster", "jellyfish", "seahorse", "bat",
+    "mouse", "hamster", "chicken", "duck", "goose", "peacock", "flamingo",
+    "crocodile", "hippo", "rhino", "zebra", "gorilla", "panda", "koala",
+    "kangaroo", "sloth", "squirrel", "hedgehog", "camel", "moose", "raccoon"
+  ],
+  "objects": [
+    "chair", "table", "lamp", "clock", "mirror", "umbrella", "backpack", "guitar",
+    "piano", "camera", "telescope", "microscope", "scissors", "hammer", "wrench",
+    "ladder", "pillow", "blanket", "candle", "trophy", "crown", "sword", "shield",
+    "compass", "anchor", "balloon", "kite", "skateboard", "bicycle", "motorcycle",
+    "helicopter", "submarine", "rocket", "satellite", "lighthouse", "bridge",
+    "castle", "tent", "igloo", "windmill", "ferris wheel", "trampoline",
+    "microphone", "headphones", "keyboard", "battery", "magnet", "parachute",
+    "envelope", "mailbox", "hourglass", "globe", "treasure chest", "binoculars"
+  ],
+  "actions": [
+    "running", "swimming", "dancing", "singing", "cooking", "painting", "climbing",
+    "fishing", "surfing", "skiing", "skating", "juggling", "sneezing", "yawning",
+    "sleeping", "dreaming", "laughing", "crying", "waving", "clapping", "diving",
+    "flying", "crawling", "jumping", "hiding", "digging", "planting", "watering",
+    "knitting", "sewing", "boxing", "wrestling", "archery", "bowling", "camping",
+    "hiking", "rowing", "sailing", "gardening", "reading", "writing", "typing",
+    "whistling", "blowing", "stretching", "meditating", "shaving", "ironing",
+    "sweeping", "mopping", "snorkeling", "bungee jumping", "tightrope walking"
+  ]
+}
