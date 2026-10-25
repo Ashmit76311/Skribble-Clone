@@ -3,6 +3,7 @@ dist
 .env
 *.tsbuildinfo
 e2e/screenshots
-screenshots
+/screenshots
 e2e/ui-shots
 ui-shots
+!docs/screenshots/
