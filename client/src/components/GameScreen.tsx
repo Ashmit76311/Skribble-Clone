@@ -14,6 +14,8 @@ import type {
   HintUpdatePayload,
 } from "@skribbl/shared";
 import Canvas from "./Canvas";
+import Avatar from "./Avatar";
+import { isMuted, toggleMuted, playCorrectSound } from "../audio";
 
 interface Props {
   room: RoomData;
@@ -24,6 +26,25 @@ interface Props {
   initialWordOptions?: string[];
   onLeave: () => void;
 }
+
+const CONFETTI_COLORS = [
+  "#6c63ff",
+  "#2dd4a8",
+  "#f5a623",
+  "#ef4565",
+  "#a78bfa",
+  "#38bdf8",
+];
+
+const CONFETTI_PIECES = Array.from({ length: 30 }, (_, i) => ({
+  id: i,
+  left: `${(i * 3.3 + 1.5) % 100}%`,
+  duration: `${2.2 + (i % 5) * 0.35}s`,
+  delay: `${(i % 7) * 0.25}s`,
+  rotate: `${360 + (i * 73) % 720}deg`,
+  color: CONFETTI_COLORS[i % CONFETTI_COLORS.length],
+  isCircle: i % 2 === 0,
+}));
 
 export default function GameScreen({
   room,
@@ -46,6 +67,12 @@ export default function GameScreen({
   const [timeLeft, setTimeLeft] = useState(0);
   const [strokes, setStrokes] = useState<Stroke[]>(initialStrokes ?? []);
   const [maskedHint, setMaskedHint] = useState<string | null>(room.hint ?? null);
+
+  const [revealedIndices, setRevealedIndices] = useState<Set<number>>(new Set());
+  const prevHintRef = useRef<string | null>(room.hint ?? null);
+
+  const [flashes, setFlashes] = useState<Record<string, { points: number; id: number }>>({});
+  const [muted, setMutedState] = useState(() => isMuted());
 
   const [messages, setMessages] = useState<ChatMessagePayload[]>(initialMessages ?? []);
   const [chatInput, setChatInput] = useState("");
@@ -99,6 +126,34 @@ export default function GameScreen({
       setMaskedHint(room.hint);
     }
   }, [room.hint]);
+
+  // Track newly revealed hint letters to highlight them briefly
+  useEffect(() => {
+    if (!maskedHint) {
+      prevHintRef.current = null;
+      setRevealedIndices(new Set());
+      return;
+    }
+    const prev = prevHintRef.current;
+    if (prev && prev !== maskedHint) {
+      const newlyRevealed = new Set<number>();
+      for (let i = 0; i < maskedHint.length; i++) {
+        const c = maskedHint[i];
+        if (c !== "_" && c !== " " && (!prev[i] || prev[i] === "_")) {
+          newlyRevealed.add(i);
+        }
+      }
+      if (newlyRevealed.size > 0) {
+        setRevealedIndices(newlyRevealed);
+        const timer = setTimeout(() => {
+          setRevealedIndices(new Set());
+        }, 700);
+        prevHintRef.current = maskedHint;
+        return () => clearTimeout(timer);
+      }
+    }
+    prevHintRef.current = maskedHint;
+  }, [maskedHint]);
 
   useEffect(() => {
     chatBottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -155,6 +210,25 @@ export default function GameScreen({
     }
 
     function onGuessResult(data: GuessResultPayload) {
+      if (data.correct && data.playerId) {
+        playCorrectSound();
+        const flashId = Date.now() + Math.random();
+        setFlashes((prev) => ({
+          ...prev,
+          [data.playerId]: { points: data.points ?? 0, id: flashId },
+        }));
+        setTimeout(() => {
+          setFlashes((prev) => {
+            if (prev[data.playerId]?.id === flashId) {
+              const copy = { ...prev };
+              delete copy[data.playerId];
+              return copy;
+            }
+            return prev;
+          });
+        }, 1200);
+      }
+
       setRoom((prev) => {
         if (!prev) return prev;
         return {
@@ -177,6 +251,9 @@ export default function GameScreen({
     }
 
     function onChatMessage(data: ChatMessagePayload) {
+      if (data.type === "correct") {
+        playCorrectSound();
+      }
       setMessages((prev) => [...prev, data]);
     }
 
@@ -342,7 +419,16 @@ export default function GameScreen({
         (room.wordLength ? Array(room.wordLength).fill("_").join(" ") : "");
       return (
         <div className="word-prompt guesser-word">
-          <span className="blanks">{displayHint}</span>
+          <span className="blanks">
+            {displayHint.split("").map((ch, idx) => (
+              <span
+                key={idx}
+                className={revealedIndices.has(idx) ? "hint-char-reveal" : ""}
+              >
+                {ch}
+              </span>
+            ))}
+          </span>
           {room.wordLength && (
             <span className="word-len">({room.wordLength} letters)</span>
           )}
@@ -378,6 +464,7 @@ export default function GameScreen({
   }
 
   const sortedPlayers = [...room.players].sort((a, b) => b.score - a.score);
+  const sortedLeaderboard = (gameOverData?.leaderboard ?? sortedPlayers);
 
   return (
     <div className="game-screen">
@@ -389,7 +476,26 @@ export default function GameScreen({
         </div>
         <div className="topbar-center">{renderWordPrompt()}</div>
         <div className="topbar-right">
-          <span className="timer-badge">{timeLeft}s</span>
+          <span
+            className={`timer-badge ${
+              timeLeft > 0 && timeLeft <= 10
+                ? "timer-red"
+                : timeLeft > 0 && timeLeft <= 20
+                ? "timer-amber"
+                : ""
+            }`}
+          >
+            {timeLeft}s
+          </span>
+          <button
+            type="button"
+            className={`mute-btn ${muted ? "muted" : ""}`}
+            onClick={() => setMutedState(toggleMuted())}
+            title={muted ? "Sound muted (click to unmute)" : "Sound on (click to mute)"}
+            aria-label={muted ? "Unmute sound" : "Mute sound"}
+          >
+            {muted ? "🔇" : "🔊"}
+          </button>
           <button className="btn btn-sm btn-danger" onClick={onLeave}>
             Leave
           </button>
@@ -407,19 +513,28 @@ export default function GameScreen({
               const drawing =
                 isGameActive && (p.isDrawing || p.id === room.currentDrawer);
               const guessed = isGameActive && p.hasGuessed;
+              const flash = flashes[p.id];
               return (
                 <li
                   key={p.id}
                   className={`sidebar-player ${drawing ? "active-drawer" : ""} ${
                     guessed ? "player-guessed" : ""
-                  } ${!p.isConnected ? "player-offline" : ""}`}
+                  } ${flash ? "player-score-flash" : ""} ${
+                    !p.isConnected ? "player-offline" : ""
+                  }`}
                 >
                   <div className="player-meta">
-                    <span className="player-name">
-                      #{idx + 1} {p.name}
-                    </span>
+                    <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", minWidth: 0 }}>
+                      <Avatar name={p.name} seed={p.id} size="sm" />
+                      <span className="player-name">
+                        #{idx + 1} {p.name}
+                      </span>
+                    </div>
                     <span className="player-score">{p.score} pts</span>
                   </div>
+                  {flash && flash.points > 0 && (
+                    <span className="floating-points">+{flash.points}</span>
+                  )}
                   <div className="player-tags">
                     {!p.isConnected && <span className="tag-offline">Offline</span>}
                     {drawing && <span className="tag-drawing">Drawing</span>}
@@ -492,11 +607,27 @@ export default function GameScreen({
                         </button>
                       ))}
                     </div>
+                    <div className="word-select-countdown">
+                      <div
+                        className="word-select-countdown-bar"
+                        style={{
+                          width: `${Math.max(0, Math.min(100, (timeLeft / 15) * 100))}%`,
+                        }}
+                      />
+                    </div>
                     <span className="subtext">Auto-selects in {timeLeft}s</span>
                   </>
                 ) : (
                   <>
                     <h2>{drawer?.name ?? "Drawer"} is choosing a word...</h2>
+                    <div className="word-select-countdown">
+                      <div
+                        className="word-select-countdown-bar"
+                        style={{
+                          width: `${Math.max(0, Math.min(100, (timeLeft / 15) * 100))}%`,
+                        }}
+                      />
+                    </div>
                     <span className="subtext">{timeLeft}s remaining</span>
                   </>
                 )}
@@ -515,14 +646,22 @@ export default function GameScreen({
                   {sortedPlayers.map((p) => {
                     const diff = roundEndTurnPoints[p.id] ?? 0;
                     return (
-                      <div key={p.id} className="score-item">
-                        <span className="score-name">{p.name}</span>
-                        {diff > 0 && (
-                          <span className="score-diff">+{diff} pts</span>
-                        )}
-                        <span className="score-total">
-                          {roundEndScores[p.id] ?? p.score} pts
-                        </span>
+                      <div
+                        key={p.id}
+                        className={`score-item ${diff > 0 ? "score-item-highlight" : ""}`}
+                      >
+                        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                          <Avatar name={p.name} seed={p.id} size="sm" />
+                          <span className="score-name">{p.name}</span>
+                        </div>
+                        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                          {diff > 0 && (
+                            <span className="score-diff count-up">+{diff} pts</span>
+                          )}
+                          <span className="score-total">
+                            {roundEndScores[p.id] ?? p.score} pts
+                          </span>
+                        </div>
                       </div>
                     );
                   })}
@@ -534,10 +673,27 @@ export default function GameScreen({
 
           {room.phase === GamePhase.GAME_OVER && (
             <div className="game-overlay">
+              <div className="confetti-container" aria-hidden="true">
+                {CONFETTI_PIECES.map((piece) => (
+                  <div
+                    key={piece.id}
+                    className="confetti-piece"
+                    style={{
+                      left: piece.left,
+                      backgroundColor: piece.color,
+                      borderRadius: piece.isCircle ? "50%" : "2px",
+                      ["--confetti-duration" as any]: piece.duration,
+                      ["--confetti-delay" as any]: piece.delay,
+                      ["--confetti-rotate" as any]: piece.rotate,
+                    }}
+                  />
+                ))}
+              </div>
               <div className="overlay-card">
                 <h2>Game Over</h2>
                 {gameOverData?.winners && gameOverData.winners.length > 1 ? (
                   <div className="winner-box">
+                    <div className="winner-crown">👑</div>
                     <span className="winner-label">It's a Tie! Winners:</span>
                     <span className="winner-name">
                       {gameOverData.winners.map((w) => w.name).join(", ")}
@@ -547,23 +703,59 @@ export default function GameScreen({
                     </span>
                   </div>
                 ) : (
-                  gameOverData?.winner && (
+                  (gameOverData?.winner || sortedLeaderboard[0]) && (
                     <div className="winner-box">
+                      <div className="winner-crown">👑</div>
                       <span className="winner-label">Winner</span>
                       <span className="winner-name">
-                        {gameOverData.winner.name}
+                        {gameOverData?.winner?.name ?? sortedLeaderboard[0].name}
                       </span>
                       <span className="winner-score">
-                        {gameOverData.winner.score} pts
+                        {gameOverData?.winner?.score ?? sortedLeaderboard[0].score} pts
                       </span>
                     </div>
                   )
                 )}
+
+                {/* Top 3 Podium */}
+                {sortedLeaderboard.length >= 2 && (
+                  <div className="podium">
+                    {sortedLeaderboard[1] && (
+                      <div className="podium-place">
+                        <Avatar name={sortedLeaderboard[1].name} seed={sortedLeaderboard[1].id} size="sm" />
+                        <span className="podium-name">{sortedLeaderboard[1].name}</span>
+                        <div className="podium-bar">2</div>
+                        <span className="podium-score">{sortedLeaderboard[1].score} pts</span>
+                      </div>
+                    )}
+                    {sortedLeaderboard[0] && (
+                      <div className="podium-place">
+                        <div className="winner-crown" style={{ fontSize: "1.25rem", animation: "none" }}>👑</div>
+                        <Avatar name={sortedLeaderboard[0].name} seed={sortedLeaderboard[0].id} size="sm" />
+                        <span className="podium-name">{sortedLeaderboard[0].name}</span>
+                        <div className="podium-bar">1</div>
+                        <span className="podium-score">{sortedLeaderboard[0].score} pts</span>
+                      </div>
+                    )}
+                    {sortedLeaderboard[2] && (
+                      <div className="podium-place">
+                        <Avatar name={sortedLeaderboard[2].name} seed={sortedLeaderboard[2].id} size="sm" />
+                        <span className="podium-name">{sortedLeaderboard[2].name}</span>
+                        <div className="podium-bar">3</div>
+                        <span className="podium-score">{sortedLeaderboard[2].score} pts</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 <div className="leaderboard-table">
-                  {(gameOverData?.leaderboard ?? sortedPlayers).map((p, idx) => (
+                  {sortedLeaderboard.map((p, idx) => (
                     <div key={p.id} className="leaderboard-item">
                       <span className="rank">#{idx + 1}</span>
-                      <span className="name">{p.name}</span>
+                      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flex: 1, minWidth: 0 }}>
+                        <Avatar name={p.name} seed={p.id} size="sm" />
+                        <span className="name">{p.name}</span>
+                      </div>
                       <span className="score">{p.score} pts</span>
                     </div>
                   ))}
@@ -585,12 +777,14 @@ export default function GameScreen({
 
         <section className="game-chat-panel">
           <div className="chat-header">
-            <h3>Chat</h3>
-            {room.phase === GamePhase.DRAWING && (
-              <span className="chat-channel-badge">
-                {isDrawer || hasGuessed ? "Guessed Channel" : "Guessing"}
-              </span>
-            )}
+            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+              <h3>Chat</h3>
+              {room.phase === GamePhase.DRAWING && (
+                <span className="chat-channel-badge">
+                  {isDrawer || hasGuessed ? "Guessed Channel" : "Guessing"}
+                </span>
+              )}
+            </div>
           </div>
 
           <div className="chat-messages">
@@ -617,9 +811,16 @@ export default function GameScreen({
                 );
               }
               return (
-                <div key={idx} className="chat-msg">
-                  <span className="chat-author">{m.name}: </span>
-                  <span className="chat-text">{m.text}</span>
+                <div
+                  key={idx}
+                  className="chat-msg"
+                  style={{ display: "flex", alignItems: "baseline", gap: "0.35rem" }}
+                >
+                  <Avatar name={m.name} seed={m.playerId || m.name} size="sm" />
+                  <div style={{ flex: 1, minWidth: 0, wordBreak: "break-word" }}>
+                    <span className="chat-author">{m.name}: </span>
+                    <span className="chat-text">{m.text}</span>
+                  </div>
                 </div>
               );
             })}

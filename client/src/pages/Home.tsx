@@ -4,6 +4,7 @@ import { socket, deviceId } from "../socket";
 import { SocketEvent, WordMode } from "@skribbl/shared";
 import type { RoomSettings } from "@skribbl/shared";
 import { useToast, ToastContainer } from "../components/Toast";
+import Avatar from "../components/Avatar";
 
 const API_BASE =
   import.meta.env.VITE_SERVER_URL ||
@@ -145,14 +146,18 @@ export default function Home() {
       <h1 className="title">skribbl</h1>
 
       <div className="name-section">
-        <input
-          type="text"
-          placeholder="Your name"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          maxLength={20}
-          className="input"
-        />
+        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+          <Avatar name={name || "You"} seed={name || "You"} size="md" />
+          <input
+            type="text"
+            placeholder="Your name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            maxLength={20}
+            className="input"
+            style={{ flex: 1 }}
+          />
+        </div>
         <button
           type="button"
           className="btn btn-primary btn-quick-play"

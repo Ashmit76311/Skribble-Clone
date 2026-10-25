@@ -16,6 +16,7 @@ import type {
 } from "@skribbl/shared";
 import { useToast, ToastContainer } from "../components/Toast";
 import GameScreen from "../components/GameScreen";
+import Avatar from "../components/Avatar";
 
 function getStoredSession(code: string): { code: string; token: string; playerId: string } | null {
   try {
@@ -371,6 +372,7 @@ export default function Lobby() {
           {room.players.map((p) => (
             <li key={p.id} className="player-item">
               <div className="player-info">
+                <Avatar name={p.name} seed={p.id} size="sm" />
                 <span>{p.name}</span>
                 {!p.isConnected && <span className="offline-badge">offline</span>}
                 {p.isHost && <span className="host-badge">host</span>}
