@@ -63,6 +63,8 @@ export default function GameScreen({
   const [roundEndWord, setRoundEndWord] = useState<string | null>(null);
   const [roundEndScores, setRoundEndScores] = useState<Record<string, number>>({});
   const [roundEndTurnPoints, setRoundEndTurnPoints] = useState<Record<string, number>>({});
+  const [countUpDone, setCountUpDone] = useState(false);
+  const [displayScores, setDisplayScores] = useState<Record<string, number>>({});
   const [gameOverData, setGameOverData] = useState<GameOverPayload | null>(null);
   const [timeLeft, setTimeLeft] = useState(0);
   const [strokes, setStrokes] = useState<Stroke[]>(initialStrokes ?? []);
@@ -77,6 +79,30 @@ export default function GameScreen({
   const [messages, setMessages] = useState<ChatMessagePayload[]>(initialMessages ?? []);
   const [chatInput, setChatInput] = useState("");
   const chatBottomRef = useRef<HTMLDivElement>(null);
+  const initialTurnDividerAdded = useRef(false);
+
+  useEffect(() => {
+    if (initialTurnDividerAdded.current) return;
+    if (room.currentDrawer && (room.phase === GamePhase.WORD_SELECT || room.phase === GamePhase.DRAWING)) {
+      initialTurnDividerAdded.current = true;
+      const drawer = room.players.find((p) => p.id === room.currentDrawer);
+      const drawerName = drawer?.name ?? "Someone";
+      const dividerText = `Round ${room.currentRound || 1} — ${drawerName} is drawing`;
+      setMessages((msgs) => {
+        if (msgs.some((m) => m.text === dividerText)) return msgs;
+        return [
+          ...msgs,
+          {
+            playerId: "system",
+            name: "system",
+            text: dividerText,
+            type: "system",
+            timestamp: Date.now(),
+          },
+        ];
+      });
+    }
+  }, []);
 
   const [confirmKick, setConfirmKick] = useState<{
     playerId: string;
@@ -176,43 +202,74 @@ export default function GameScreen({
       setRoundEndWord(null);
       setGameOverData(null);
       setMaskedHint(null);
-      setRoom((prev) =>
-        prev
-          ? {
-              ...prev,
-              phase: GamePhase.WORD_SELECT,
-              currentRound: data.round,
-              currentDrawer: data.drawerId,
-              endsAt: data.endsAt,
-              wordOptions: data.wordOptions ?? prev.wordOptions,
-              word: null,
-              hint: null,
-              players: prev.players.map((p) => ({
-                ...p,
-                isDrawing: p.id === data.drawerId,
-                hasGuessed: false,
-              })),
-            }
-          : prev
-      );
+      setCountUpDone(false);
+      setRoom((prev) => {
+        if (!prev) return prev;
+        const drawer = prev.players.find((p) => p.id === data.drawerId);
+        const drawerName = drawer?.name ?? "Someone";
+        const dividerText = `Round ${data.round} — ${drawerName} is drawing`;
+        setMessages((msgs) => {
+          if (msgs.length > 0 && msgs[msgs.length - 1].text === dividerText) return msgs;
+          return [
+            ...msgs,
+            {
+              playerId: "system",
+              name: "system",
+              text: dividerText,
+              type: "system",
+              timestamp: Date.now(),
+            },
+          ];
+        });
+        return {
+          ...prev,
+          phase: GamePhase.WORD_SELECT,
+          currentRound: data.round,
+          currentDrawer: data.drawerId,
+          endsAt: data.endsAt,
+          wordOptions: data.wordOptions ?? prev.wordOptions,
+          word: null,
+          hint: null,
+          players: prev.players.map((p) => ({
+            ...p,
+            isDrawing: p.id === data.drawerId,
+            hasGuessed: false,
+          })),
+        };
+      });
     }
 
     function onWordChosen(data: WordChosenPayload) {
       setWordOptions([]);
       if (data.hint) setMaskedHint(data.hint);
-      setRoom((prev) =>
-        prev
-          ? {
-              ...prev,
-              phase: GamePhase.DRAWING,
-              wordLength: data.wordLength,
-              endsAt: data.endsAt,
-              word: data.word ?? prev.word,
-              hint: data.hint ?? prev.hint,
-              wordOptions: undefined,
-            }
-          : prev
-      );
+      setRoom((prev) => {
+        if (!prev) return prev;
+        const drawer = prev.players.find((p) => p.id === prev.currentDrawer);
+        const drawerName = drawer?.name ?? "Someone";
+        const dividerText = `Round ${prev.currentRound} — ${drawerName} is drawing`;
+        setMessages((msgs) => {
+          if (msgs.some((m) => m.text === dividerText)) return msgs;
+          return [
+            ...msgs,
+            {
+              playerId: "system",
+              name: "system",
+              text: dividerText,
+              type: "system",
+              timestamp: Date.now(),
+            },
+          ];
+        });
+        return {
+          ...prev,
+          phase: GamePhase.DRAWING,
+          wordLength: data.wordLength,
+          endsAt: data.endsAt,
+          word: data.word ?? prev.word,
+          hint: data.hint ?? prev.hint,
+          wordOptions: undefined,
+        };
+      });
     }
 
     function onHintUpdate(data: HintUpdatePayload) {
@@ -272,19 +329,49 @@ export default function GameScreen({
       setRoundEndWord(data.word);
       setRoundEndScores(data.scores);
       setRoundEndTurnPoints(data.turnPoints ?? {});
-      setRoom((prev) =>
-        prev
-          ? {
-              ...prev,
-              phase: GamePhase.ROUND_END,
-              currentDrawer: data.nextDrawerId,
-              players: prev.players.map((p) => ({
-                ...p,
-                score: data.scores[p.id] ?? p.score,
-              })),
-            }
-          : prev
-      );
+      setCountUpDone(false);
+
+      setRoom((prev) => {
+        if (!prev) return prev;
+        const startScores: Record<string, number> = {};
+        for (const p of prev.players) {
+          const finalScore = data.scores[p.id] ?? p.score;
+          const gained = (data.turnPoints ?? {})[p.id] ?? 0;
+          startScores[p.id] = Math.max(0, finalScore - gained);
+        }
+        setDisplayScores(startScores);
+
+        const startTime = performance.now();
+        const duration = 600;
+        const animate = (now: number) => {
+          const elapsed = now - startTime;
+          const progress = Math.min(1, elapsed / duration);
+          const currentScores: Record<string, number> = {};
+          for (const pId in data.scores) {
+            const start = startScores[pId] ?? data.scores[pId];
+            const end = data.scores[pId];
+            currentScores[pId] = Math.round(start + (end - start) * progress);
+          }
+          setDisplayScores(currentScores);
+          if (progress < 1) {
+            requestAnimationFrame(animate);
+          } else {
+            setDisplayScores(data.scores);
+            setCountUpDone(true);
+          }
+        };
+        requestAnimationFrame(animate);
+
+        return {
+          ...prev,
+          phase: GamePhase.ROUND_END,
+          currentDrawer: data.nextDrawerId,
+          players: prev.players.map((p) => ({
+            ...p,
+            score: data.scores[p.id] ?? p.score,
+          })),
+        };
+      });
     }
 
     function onGameOver(data: GameOverPayload) {
@@ -488,8 +575,10 @@ export default function GameScreen({
         : ""
       : "";
 
+  const isCurrentDrawer = isDrawer && room.phase === GamePhase.DRAWING;
+
   return (
-    <div className="game-screen">
+    <div className={`game-screen ${isCurrentDrawer ? "is-drawer-turn" : ""}`}>
       <header className="game-topbar">
         <div className="topbar-left">
           <span className="round-badge">
@@ -498,9 +587,11 @@ export default function GameScreen({
         </div>
         <div className="topbar-center">{renderWordPrompt()}</div>
         <div className="topbar-right">
-          <span className={`timer-badge ${timerClass}`}>
-            {isTimedPhase ? `${timeLeft}s` : "—"}
-          </span>
+          {isTimedPhase && (
+            <span className={`timer-badge ${timerClass}`}>
+              {timeLeft}s
+            </span>
+          )}
           <button
             type="button"
             className={`mute-btn ${muted ? "muted" : ""}`}
@@ -719,13 +810,13 @@ export default function GameScreen({
                           <Avatar name={p.name} seed={p.id} size="sm" />
                           <span className="score-name" title={p.name}>{p.name}</span>
                         </div>
-                        {diff > 0 && (
+                        {diff > 0 && countUpDone && (
                           <span className="score-diff count-up">+{diff}</span>
                         )}
                         <div className="score-total-col">
                           <span className="score-total-label">total</span>
                           <span className="score-total">
-                            {roundEndScores[p.id] ?? p.score} pts
+                            {displayScores[p.id] ?? roundEndScores[p.id] ?? p.score} pts
                           </span>
                         </div>
                       </div>
@@ -862,9 +953,13 @@ export default function GameScreen({
                 );
               }
               if (m.type === "system") {
+                const isTurnDivider = m.text.includes("is drawing") && m.text.startsWith("Round ");
                 return (
-                  <div key={idx} className="chat-msg chat-msg-system">
-                    {m.text}
+                  <div
+                    key={idx}
+                    className={`chat-msg ${isTurnDivider ? "chat-msg-turn-divider" : "chat-msg-system"}`}
+                  >
+                    {isTurnDivider ? <span>{m.text}</span> : m.text}
                   </div>
                 );
               }

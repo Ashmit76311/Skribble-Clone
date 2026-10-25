@@ -248,6 +248,22 @@ async function runSession(
   await drawerPage.screenshot({ path: shotDrawingDrawer, fullPage: false });
   console.log(`Captured: 5-drawing-drawer-${vpKey}.png`);
 
+  if (vpKey === "phone") {
+    for (const [w, h] of [
+      [844, 390],
+      [667, 375],
+      [932, 430],
+    ]) {
+      await drawerPage.setViewportSize({ width: w, height: h });
+      await sleep(400);
+      const landscapeShot = path.join(OUT_DIR, `5-drawing-drawer-landscape-${w}x${h}.png`);
+      await drawerPage.screenshot({ path: landscapeShot, fullPage: false });
+      console.log(`Captured: 5-drawing-drawer-landscape-${w}x${h}.png`);
+    }
+    await drawerPage.setViewportSize({ width: 390, height: 844 });
+    await sleep(300);
+  }
+
   // 6. DRAWING AS GUESSER (send wrong guesses)
   const g1Input = guesser1Page.locator("input.chat-input");
   await g1Input.fill("sunflower");
