@@ -39,19 +39,21 @@ function getInitials(name?: string): string {
 }
 
 export default function Avatar({ name = "", seed, size, className = "" }: AvatarProps) {
+  const isEmpty = !name || !name.trim();
   const identifier = seed || name || "player";
   const hash = hashString(identifier);
-  const bgColor = PALETTE[hash % PALETTE.length];
+  const bgColor = isEmpty ? "var(--bg-tertiary)" : PALETTE[hash % PALETTE.length];
+  const textColor = isEmpty ? "var(--text-muted)" : "#ffffff";
   const initials = getInitials(name);
 
   const sizeClass = size === "sm" ? "avatar-sm" : size === "lg" ? "avatar-lg" : "";
 
   return (
     <div
-      className={`avatar ${sizeClass} ${className}`.trim()}
-      style={{ backgroundColor: bgColor }}
-      title={name}
-      aria-label={`Avatar for ${name}`}
+      className={`avatar ${sizeClass} ${isEmpty ? "avatar-empty" : ""} ${className}`.trim()}
+      style={{ backgroundColor: bgColor, color: textColor }}
+      title={name || "Unnamed"}
+      aria-label={`Avatar for ${name || "unnamed"}`}
     >
       <span>{initials}</span>
     </div>

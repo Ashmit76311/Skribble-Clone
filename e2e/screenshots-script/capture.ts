@@ -140,8 +140,18 @@ async function runSession(
   await hostPage.waitForSelector(".name-section input");
   await hostPage.fill(".name-section input", "HostZara");
   // Set draw time to 45s and rounds to 2
-  await hostPage.fill('label:has-text("Rounds") input', "2");
-  await hostPage.fill('label:has-text("Draw Time") input', "45");
+  const roundsSelect = hostPage.locator('label:has-text("Rounds") select');
+  if (await roundsSelect.count() > 0) {
+    await roundsSelect.selectOption("2");
+  } else {
+    await hostPage.fill('label:has-text("Rounds") input', "2");
+  }
+  const drawTimeSelect = hostPage.locator('label:has-text("Draw Time") select');
+  if (await drawTimeSelect.count() > 0) {
+    await drawTimeSelect.selectOption("45");
+  } else {
+    await hostPage.fill('label:has-text("Draw Time") input', "45");
+  }
   await hostPage.click('.create-form button[type="submit"]');
   await hostPage.waitForSelector(".lobby", { timeout: 15000 });
 

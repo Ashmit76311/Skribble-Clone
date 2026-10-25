@@ -270,10 +270,12 @@ export default function Lobby() {
     playerId: string;
     ban: boolean;
   } | null>(null);
+  const [activeMenuPlayerId, setActiveMenuPlayerId] = useState<string | null>(null);
 
   function executeKick(playerId: string, ban: boolean) {
     socket.emit(SocketEvent.KickPlayer, { playerId, ban });
     setConfirmKick(null);
+    setActiveMenuPlayerId(null);
   }
 
   function toggleReady() {
@@ -377,9 +379,9 @@ export default function Lobby() {
                 {!p.isConnected && <span className="offline-badge">offline</span>}
                 {p.isHost && <span className="host-badge">host</span>}
                 {p.id === myPlayerId && <span className="you-badge">you</span>}
-                {p.isReady && <span className="ready-badge">✓</span>}
+                {p.isReady && <span className="ready-badge ready-chip">Ready</span>}
                 {!p.isHost && p.isConnected && !p.isReady && (
-                  <span className="not-ready-badge">✗</span>
+                  <span className="not-ready-badge not-ready-chip">Not ready</span>
                 )}
               </div>
               {isHost && p.id !== myPlayerId && (
@@ -387,12 +389,14 @@ export default function Lobby() {
                   {confirmKick?.playerId === p.id ? (
                     <span className="confirm-group">
                       <button
+                        type="button"
                         className="btn btn-xs btn-danger"
                         onClick={() => executeKick(p.id, confirmKick.ban)}
                       >
                         Confirm {confirmKick.ban ? "Ban" : "Kick"}?
                       </button>
                       <button
+                        type="button"
                         className="btn btn-xs"
                         onClick={() => setConfirmKick(null)}
                       >
@@ -400,20 +404,43 @@ export default function Lobby() {
                       </button>
                     </span>
                   ) : (
-                    <>
+                    <div className="player-menu-wrapper">
                       <button
-                        className="btn btn-xs btn-kick"
-                        onClick={() => setConfirmKick({ playerId: p.id, ban: false })}
+                        type="button"
+                        className="player-menu-btn"
+                        aria-label="Player actions"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setActiveMenuPlayerId(activeMenuPlayerId === p.id ? null : p.id);
+                        }}
                       >
-                        Kick
+                        ⋯
                       </button>
-                      <button
-                        className="btn btn-xs btn-ban"
-                        onClick={() => setConfirmKick({ playerId: p.id, ban: true })}
-                      >
-                        Ban
-                      </button>
-                    </>
+                      {activeMenuPlayerId === p.id && (
+                        <div className="player-menu-dropdown">
+                          <button
+                            type="button"
+                            className="player-menu-item btn-kick"
+                            onClick={() => {
+                              setActiveMenuPlayerId(null);
+                              setConfirmKick({ playerId: p.id, ban: false });
+                            }}
+                          >
+                            Kick
+                          </button>
+                          <button
+                            type="button"
+                            className="player-menu-item btn-ban"
+                            onClick={() => {
+                              setActiveMenuPlayerId(null);
+                              setConfirmKick({ playerId: p.id, ban: true });
+                            }}
+                          >
+                            Ban
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   )}
                 </div>
               )}
@@ -424,15 +451,37 @@ export default function Lobby() {
 
       <div className="card settings-summary">
         <h2>Settings</h2>
-        <div className="settings-info">
-          <span>Rounds: {room.settings.rounds}</span>
-          <span>Draw Time: {room.settings.drawTime}s</span>
-          <span>Word Count: {room.settings.wordCount}</span>
-          <span>Hints: {room.settings.hints}</span>
-          <span>Mode: {room.settings.wordMode}</span>
-          {room.settings.useCustomOnly && <span>Custom words only</span>}
+        <div className="settings-chips-grid">
+          <div className="settings-chip">
+            <span className="chip-label">Rounds</span>
+            <span className="chip-val">{room.settings.rounds}</span>
+          </div>
+          <div className="settings-chip">
+            <span className="chip-label">Draw Time</span>
+            <span className="chip-val">{room.settings.drawTime}s</span>
+          </div>
+          <div className="settings-chip">
+            <span className="chip-label">Words</span>
+            <span className="chip-val">{room.settings.wordCount}</span>
+          </div>
+          <div className="settings-chip">
+            <span className="chip-label">Hints</span>
+            <span className="chip-val">
+              {room.settings.hints === 0 ? "Off" : room.settings.hints}
+            </span>
+          </div>
+          <div className="settings-chip">
+            <span className="chip-label">Mode</span>
+            <span className="chip-val">{room.settings.wordMode}</span>
+          </div>
           {room.settings.customWords && room.settings.customWords.length > 0 && (
-            <span>Custom words: {room.settings.customWords.length}</span>
+            <div className="settings-chip">
+              <span className="chip-label">Custom Words</span>
+              <span className="chip-val">
+                {room.settings.customWords.length}
+                {room.settings.useCustomOnly ? " (only)" : ""}
+              </span>
+            </div>
           )}
         </div>
         {isHost && (

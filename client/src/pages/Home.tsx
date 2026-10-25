@@ -147,7 +147,7 @@ export default function Home() {
 
       <div className="name-section">
         <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-          <Avatar name={name || "You"} seed={name || "You"} size="md" />
+          <Avatar name={name} seed={name} size="md" />
           <input
             type="text"
             placeholder="Your name"
@@ -158,155 +158,187 @@ export default function Home() {
             style={{ flex: 1 }}
           />
         </div>
-        <button
-          type="button"
-          className="btn btn-primary btn-quick-play"
-          onClick={quickPlay}
-          style={{ width: "100%", marginTop: "0.5rem" }}
-        >
-          Quick Play
-        </button>
       </div>
 
-      <div className="card">
-        <h2>Create Room</h2>
-        <form onSubmit={createRoom} className="create-form">
-          <div className="settings-grid">
-            <label>
-              Players
-              <input
-                type="number"
-                min={2}
-                max={20}
-                value={settings.maxPlayers}
-                onChange={(e) => updateSetting("maxPlayers", +e.target.value)}
-              />
-            </label>
-            <label>
-              Rounds
-              <input
-                type="number"
-                min={2}
-                max={10}
-                value={settings.rounds}
-                onChange={(e) => updateSetting("rounds", +e.target.value)}
-              />
-            </label>
-            <label>
-              Draw Time
-              <input
-                type="number"
-                min={15}
-                max={240}
-                value={settings.drawTime}
-                onChange={(e) => updateSetting("drawTime", +e.target.value)}
-              />
-            </label>
-            <label>
-              Words
-              <input
-                type="number"
-                min={1}
-                max={5}
-                value={settings.wordCount}
-                onChange={(e) => updateSetting("wordCount", +e.target.value)}
-              />
-            </label>
-            <label>
-              Hints
-              <input
-                type="number"
-                min={0}
-                max={5}
-                value={settings.hints}
-                onChange={(e) => updateSetting("hints", +e.target.value)}
-              />
-            </label>
-            <label>
-              Word Mode
-              <select
-                value={settings.wordMode}
-                onChange={(e) => updateSetting("wordMode", e.target.value as WordMode)}
-              >
-                <option value={WordMode.Normal}>Normal</option>
-                <option value={WordMode.Hidden}>Hidden</option>
-                <option value={WordMode.Combination}>Combination</option>
-              </select>
-            </label>
-          </div>
-          <div className="custom-words-field">
-            <label>
-              Custom Words
-              <textarea
-                className="input custom-words-textarea"
-                placeholder="Custom words separated by commas or new lines..."
-                value={customWordsText}
-                onChange={(e) => setCustomWordsText(e.target.value)}
-                rows={3}
-              />
-            </label>
-            <label className="toggle-row">
-              <input
-                type="checkbox"
-                checked={settings.useCustomOnly}
-                onChange={(e) => updateSetting("useCustomOnly", e.target.checked)}
-              />
-              Use custom words exclusively
-            </label>
-          </div>
-          <label className="toggle-row">
-            <input
-              type="checkbox"
-              checked={settings.isPublic}
-              onChange={(e) => updateSetting("isPublic", e.target.checked)}
-            />
-            Public room
-          </label>
-          <button type="submit" className="btn btn-primary">
-            Create
-          </button>
-        </form>
-      </div>
-
-      <div className="card">
-        <h2>Join Room</h2>
-        <form onSubmit={joinByCode} className="join-form">
-          <input
-            type="text"
-            placeholder="Room code"
-            value={joinCode}
-            onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
-            maxLength={6}
-            className="input"
-          />
-          <button type="submit" className="btn">
-            Join
-          </button>
-        </form>
-      </div>
-
-      {publicRooms.length > 0 && (
-        <div className="card">
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem" }}>
-            <h2 style={{ margin: 0 }}>Public Rooms</h2>
-            <button className="btn btn-xs" type="button" onClick={fetchPublicRooms}>
-              Refresh
-            </button>
-          </div>
-          <div className="public-rooms">
-            {publicRooms.map((r) => (
-              <div key={r.code} className="room-row">
-                <span>
-                  {r.hostName}'s room — {r.playerCount}/{r.maxPlayers}
-                </span>
-                <button className="btn btn-sm" onClick={() => joinRoom(r.code)}>
-                  Join
-                </button>
+      <div className="home-content-grid">
+        <div className="home-col-create">
+          <div className="card">
+            <h2>Create Room</h2>
+            <form onSubmit={createRoom} className="create-form">
+              <div className="settings-grid">
+                <label>
+                  Players
+                  <select
+                    value={settings.maxPlayers}
+                    onChange={(e) => updateSetting("maxPlayers", +e.target.value)}
+                  >
+                    {Array.from({ length: 19 }, (_, i) => i + 2).map((n) => (
+                      <option key={n} value={n}>
+                        {n} players
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  Rounds
+                  <select
+                    value={settings.rounds}
+                    onChange={(e) => updateSetting("rounds", +e.target.value)}
+                  >
+                    {Array.from({ length: 9 }, (_, i) => i + 2).map((n) => (
+                      <option key={n} value={n}>
+                        {n} rounds
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  Draw Time
+                  <select
+                    value={settings.drawTime}
+                    onChange={(e) => updateSetting("drawTime", +e.target.value)}
+                  >
+                    {[30, 45, 60, 80, 100, 120, 150, 180, 240].map((t) => (
+                      <option key={t} value={t}>
+                        {t} seconds
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  Words
+                  <select
+                    value={settings.wordCount}
+                    onChange={(e) => updateSetting("wordCount", +e.target.value)}
+                  >
+                    {[1, 2, 3, 4, 5].map((w) => (
+                      <option key={w} value={w}>
+                        {w} {w === 1 ? "word" : "words"}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  Hints
+                  <select
+                    value={settings.hints}
+                    onChange={(e) => updateSetting("hints", +e.target.value)}
+                  >
+                    <option value={0}>Off</option>
+                    <option value={1}>1 hint</option>
+                    <option value={2}>2 hints</option>
+                    <option value={3}>3 hints</option>
+                    <option value={4}>4 hints</option>
+                    <option value={5}>5 hints</option>
+                  </select>
+                </label>
+                <label>
+                  Word Mode
+                  <select
+                    value={settings.wordMode}
+                    onChange={(e) => updateSetting("wordMode", e.target.value as WordMode)}
+                  >
+                    <option value={WordMode.Normal}>Normal</option>
+                    <option value={WordMode.Hidden}>Hidden</option>
+                    <option value={WordMode.Combination}>Combination</option>
+                  </select>
+                </label>
               </div>
-            ))}
+
+              <details className="advanced-settings">
+                <summary>Advanced Settings</summary>
+                <div className="advanced-content">
+                  <label className="field-label">
+                    Custom Words
+                    <textarea
+                      className="input custom-words-textarea"
+                      placeholder="Custom words separated by commas or new lines..."
+                      value={customWordsText}
+                      onChange={(e) => setCustomWordsText(e.target.value)}
+                      rows={3}
+                    />
+                  </label>
+                  <label className="toggle-row">
+                    <input
+                      type="checkbox"
+                      checked={settings.useCustomOnly}
+                      onChange={(e) => updateSetting("useCustomOnly", e.target.checked)}
+                    />
+                    Use custom words exclusively
+                  </label>
+                </div>
+              </details>
+
+              <label className="toggle-row">
+                <input
+                  type="checkbox"
+                  checked={settings.isPublic}
+                  onChange={(e) => updateSetting("isPublic", e.target.checked)}
+                />
+                Public room
+              </label>
+
+              <button type="submit" className="btn btn-primary btn-create">
+                Create
+              </button>
+            </form>
           </div>
         </div>
-      )}
+
+        <div className="home-col-join">
+          <div className="card quick-play-card">
+            <h2>Quick Play</h2>
+            <button
+              type="button"
+              className="btn btn-primary btn-quick-play"
+              onClick={quickPlay}
+              style={{ width: "100%" }}
+            >
+              Play Now
+            </button>
+          </div>
+
+          <div className="card">
+            <h2>Join Room</h2>
+            <form onSubmit={joinByCode} className="join-form">
+              <input
+                type="text"
+                placeholder="Room code"
+                value={joinCode}
+                onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
+                maxLength={6}
+                className="input"
+              />
+              <button type="submit" className="btn">
+                Join
+              </button>
+            </form>
+          </div>
+
+          {publicRooms.length > 0 && (
+            <div className="card">
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem" }}>
+                <h2 style={{ margin: 0 }}>Public Rooms</h2>
+                <button className="btn btn-xs" type="button" onClick={fetchPublicRooms}>
+                  Refresh
+                </button>
+              </div>
+              <div className="public-rooms">
+                {publicRooms.map((r) => (
+                  <div key={r.code} className="room-row">
+                    <span>
+                      {r.hostName}'s room — {r.playerCount}/{r.maxPlayers}
+                    </span>
+                    <button className="btn btn-sm" onClick={() => joinRoom(r.code)}>
+                      Join
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
 
       <ToastContainer toasts={toasts} />
     </div>

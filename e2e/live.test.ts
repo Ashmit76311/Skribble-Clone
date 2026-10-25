@@ -2,7 +2,7 @@ import { chromium, type Page } from "playwright";
 import fs from "fs";
 import path from "path";
 
-const BASE_URL = "https://skribble-clone-d061.onrender.com";
+const BASE_URL = process.env.BASE_URL || "https://skribble-clone-d061.onrender.com";
 const SCREENSHOT_DIR = path.resolve("screenshots");
 
 if (!fs.existsSync(SCREENSHOT_DIR)) {
@@ -161,8 +161,18 @@ async function run() {
     await hostPage.goto(BASE_URL);
     await hostPage.waitForSelector('.name-section input');
     await hostPage.fill('.name-section input', "LiveHost");
-    await hostPage.fill('label:has-text("Rounds") input', "2");
-    await hostPage.fill('label:has-text("Draw Time") input', "30");
+    const roundsSelect = hostPage.locator('label:has-text("Rounds") select');
+    if (await roundsSelect.count() > 0) {
+      await roundsSelect.selectOption("2");
+    } else {
+      await hostPage.fill('label:has-text("Rounds") input', "2");
+    }
+    const drawTimeSelect = hostPage.locator('label:has-text("Draw Time") select');
+    if (await drawTimeSelect.count() > 0) {
+      await drawTimeSelect.selectOption("30");
+    } else {
+      await hostPage.fill('label:has-text("Draw Time") input', "30");
+    }
     await hostPage.click('.create-form button[type="submit"]');
 
     await hostPage.waitForURL(/\/room\/[A-Z0-9]+/);

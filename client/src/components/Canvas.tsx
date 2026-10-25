@@ -353,79 +353,83 @@ export default function Canvas({ isDrawer, phase, initialStrokes = [] }: CanvasP
 
       {isDrawer && (
         <div className="drawing-toolbar">
-          <div className="toolbar-section tools-section">
-            <button
-              type="button"
-              className={`tool-btn ${tool === "brush" ? "active" : ""}`}
-              onClick={() => setTool("brush")}
-              title="Brush tool"
-            >
-              Brush
-            </button>
-            <button
-              type="button"
-              className={`tool-btn ${tool === "eraser" ? "active" : ""}`}
-              onClick={() => setTool("eraser")}
-              title="Eraser tool"
-            >
-              Eraser
-            </button>
-          </div>
-
-          <div className="toolbar-section sizes-section">
-            {SIZES.map((s) => (
+          <div className="toolbar-row toolbar-row-top">
+            <div className="toolbar-section tools-section">
               <button
-                key={s.size}
                 type="button"
-                className={`size-btn ${size === s.size ? "active" : ""}`}
-                onClick={() => setSize(s.size)}
-                title={`Size ${s.label}`}
+                className={`tool-btn ${tool === "brush" ? "active" : ""}`}
+                onClick={() => setTool("brush")}
+                title="Brush tool"
               >
-                <span
-                  className="size-dot"
-                  style={{
-                    width: s.dot,
-                    height: s.dot,
-                    backgroundColor: tool === "eraser" ? "#a3a3a3" : color,
-                  }}
-                />
+                Brush
               </button>
-            ))}
-          </div>
-
-          <div className="toolbar-section colors-section">
-            {COLORS.map((c) => (
               <button
-                key={c}
                 type="button"
-                className={`color-btn ${color === c && tool === "brush" ? "active" : ""}`}
-                style={{ backgroundColor: c }}
-                onClick={() => {
-                  setColor(c);
-                  setTool("brush");
-                }}
-                title={c}
-              />
-            ))}
+                className={`tool-btn ${tool === "eraser" ? "active" : ""}`}
+                onClick={() => setTool("eraser")}
+                title="Eraser tool"
+              >
+                Eraser
+              </button>
+            </div>
+
+            <div className="toolbar-section sizes-section">
+              {SIZES.map((s) => (
+                <button
+                  key={s.size}
+                  type="button"
+                  className={`size-btn ${size === s.size ? "active" : ""}`}
+                  onClick={() => setSize(s.size)}
+                  title={`Size ${s.label}`}
+                >
+                  <span
+                    className="size-dot"
+                    style={{
+                      width: s.dot,
+                      height: s.dot,
+                      backgroundColor: tool === "eraser" ? "#a3a3a3" : color,
+                    }}
+                  />
+                </button>
+              ))}
+            </div>
           </div>
 
-          <div className="toolbar-section actions-section">
-            <button
-              type="button"
-              className="btn btn-sm btn-toolbar"
-              onClick={handleUndo}
-              title="Undo last stroke"
-            >
-              Undo
-            </button>
-            <button
-              type="button"
-              className="btn btn-sm btn-toolbar btn-clear"
-              onClick={handleClear}
-              title="Clear entire canvas"
-            >
-              Clear
-            </button>
+          <div className="toolbar-row toolbar-row-bottom">
+            <div className="toolbar-section colors-section">
+              {COLORS.map((c) => (
+                <button
+                  key={c}
+                  type="button"
+                  className={`color-btn ${color === c && tool === "brush" ? "active" : ""}`}
+                  style={{ backgroundColor: c }}
+                  onClick={() => {
+                    setColor(c);
+                    setTool("brush");
+                  }}
+                  title={c}
+                />
+              ))}
+            </div>
+
+            <div className="toolbar-section actions-section">
+              <button
+                type="button"
+                className="btn btn-sm btn-toolbar"
+                onClick={handleUndo}
+                title="Undo last stroke"
+              >
+                Undo
+              </button>
+              <button
+                type="button"
+                className="btn btn-sm btn-toolbar btn-clear"
+                onClick={handleClear}
+                title="Clear entire canvas"
+              >
+                Clear
+              </button>
+            </div>
           </div>
         </div>
       )}

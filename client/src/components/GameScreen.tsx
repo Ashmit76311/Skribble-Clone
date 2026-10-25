@@ -82,10 +82,13 @@ export default function GameScreen({
     playerId: string;
     ban: boolean;
   } | null>(null);
+  const [activeMenuPlayerId, setActiveMenuPlayerId] = useState<string | null>(null);
+  const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
 
   function executeKick(playerId: string, ban: boolean) {
     socket.emit(SocketEvent.KickPlayer, { playerId, ban });
     setConfirmKick(null);
+    setActiveMenuPlayerId(null);
   }
 
   const isDebug =
@@ -499,9 +502,33 @@ export default function GameScreen({
           >
             {muted ? "🔇" : "🔊"}
           </button>
-          <button className="btn btn-sm btn-danger" onClick={onLeave}>
-            Leave
-          </button>
+          {showLeaveConfirm ? (
+            <span className="confirm-leave-group">
+              <button
+                type="button"
+                className="btn btn-sm btn-danger btn-confirm-leave"
+                onClick={onLeave}
+              >
+                Leave?
+              </button>
+              <button
+                type="button"
+                className="btn btn-sm btn-cancel-leave"
+                onClick={() => setShowLeaveConfirm(false)}
+                title="Cancel"
+              >
+                ✕
+              </button>
+            </span>
+          ) : (
+            <button
+              type="button"
+              className="btn btn-sm btn-danger"
+              onClick={() => setShowLeaveConfirm(true)}
+            >
+              Leave
+            </button>
+          )}
         </div>
       </header>
 
@@ -543,17 +570,19 @@ export default function GameScreen({
                     {p.isHost && <span className="host-badge">Host</span>}
                     {p.id === myPlayerId && <span className="you-badge">You</span>}
                   </div>
-                  {isHost && p.id !== myPlayerId && (
+                  {isHost && p.id !== myPlayerId && room.phase !== GamePhase.GAME_OVER && (
                     <div className="sidebar-player-actions">
                       {confirmKick?.playerId === p.id ? (
                         <span className="confirm-group">
                           <button
+                            type="button"
                             className="btn btn-xs btn-danger"
                             onClick={() => executeKick(p.id, confirmKick.ban)}
                           >
-                            {confirmKick.ban ? "Ban?" : "Kick?"}
+                            Confirm {confirmKick.ban ? "Ban" : "Kick"}?
                           </button>
                           <button
+                            type="button"
                             className="btn btn-xs"
                             onClick={() => setConfirmKick(null)}
                           >
@@ -561,20 +590,43 @@ export default function GameScreen({
                           </button>
                         </span>
                       ) : (
-                        <>
+                        <div className="player-menu-wrapper">
                           <button
-                            className="btn btn-xs btn-kick"
-                            onClick={() => setConfirmKick({ playerId: p.id, ban: false })}
+                            type="button"
+                            className="player-menu-btn"
+                            aria-label="Player actions"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setActiveMenuPlayerId(activeMenuPlayerId === p.id ? null : p.id);
+                            }}
                           >
-                            Kick
+                            ⋯
                           </button>
-                          <button
-                            className="btn btn-xs btn-ban"
-                            onClick={() => setConfirmKick({ playerId: p.id, ban: true })}
-                          >
-                            Ban
-                          </button>
-                        </>
+                          {activeMenuPlayerId === p.id && (
+                            <div className="player-menu-dropdown">
+                              <button
+                                type="button"
+                                className="player-menu-item btn-kick"
+                                onClick={() => {
+                                  setActiveMenuPlayerId(null);
+                                  setConfirmKick({ playerId: p.id, ban: false });
+                                }}
+                              >
+                                Kick
+                              </button>
+                              <button
+                                type="button"
+                                className="player-menu-item btn-ban"
+                                onClick={() => {
+                                  setActiveMenuPlayerId(null);
+                                  setConfirmKick({ playerId: p.id, ban: true });
+                                }}
+                              >
+                                Ban
+                              </button>
+                            </div>
+                          )}
+                        </div>
                       )}
                     </div>
                   )}
@@ -694,26 +746,18 @@ export default function GameScreen({
               <div className="overlay-card">
                 <h2>Game Over</h2>
                 {gameOverData?.winners && gameOverData.winners.length > 1 ? (
-                  <div className="winner-box">
-                    <div className="winner-crown">👑</div>
-                    <span className="winner-label">It's a Tie! Winners:</span>
-                    <span className="winner-name">
-                      {gameOverData.winners.map((w) => w.name).join(", ")}
-                    </span>
-                    <span className="winner-score">
-                      {gameOverData.winners[0].score} pts each
+                  <div className="winner-banner">
+                    <span className="winner-banner-crown">👑</span>
+                    <span className="winner-banner-text">
+                      Tie: <strong className="winner-name">{gameOverData.winners.map((w) => w.name).join(" and ")}</strong> ({gameOverData.winners[0].score} pts each)
                     </span>
                   </div>
                 ) : (
                   (gameOverData?.winner || sortedLeaderboard[0]) && (
-                    <div className="winner-box">
-                      <div className="winner-crown">👑</div>
-                      <span className="winner-label">Winner</span>
-                      <span className="winner-name">
-                        {gameOverData?.winner?.name ?? sortedLeaderboard[0].name}
-                      </span>
-                      <span className="winner-score">
-                        {gameOverData?.winner?.score ?? sortedLeaderboard[0].score} pts
+                    <div className="winner-banner">
+                      <span className="winner-banner-crown">👑</span>
+                      <span className="winner-banner-text">
+                        Winner: <strong className="winner-name">{gameOverData?.winner?.name ?? sortedLeaderboard[0].name}</strong> ({gameOverData?.winner?.score ?? sortedLeaderboard[0].score} pts)
                       </span>
                     </div>
                   )
