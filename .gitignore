@@ -1,9 +1,24 @@
-node_modules
-dist
+# Dependencies
+node_modules/
+
+# Production builds
+dist/
+
+# Environment files
 .env
+.env.*
+*.env
+!*.env.example
+!/.env.example
+
+# TypeScript build info
 *.tsbuildinfo
-e2e/screenshots
-/screenshots
-e2e/ui-shots
-ui-shots
+
+# E2E test screenshots and output
+e2e/screenshots/
+e2e/ui-shots/
+screenshots/
+ui-shots/
+
+# Allow documentation screenshots
 !docs/screenshots/
