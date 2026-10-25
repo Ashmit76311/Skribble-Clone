@@ -122,6 +122,41 @@ async function run() {
     }
     await hostPage.screenshot({ path: path.join(SCREENSHOT_DIR, "01_room_not_found.png") });
 
+    // 1b. Quick play check: two players clicking Quick Play land in the same room
+    const qpContext1 = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+    const qpContext2 = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+    const qpPage1 = await qpContext1.newPage();
+    const qpPage2 = await qpContext2.newPage();
+
+    await qpPage1.goto(BASE_URL);
+    await qpPage1.waitForSelector('.name-section input');
+    await qpPage1.fill('.name-section input', "QuickUser1");
+    await qpPage1.click('button.btn-quick-play');
+    await qpPage1.waitForURL(/\/room\/[A-Z0-9]+/);
+    const qpRoom1 = qpPage1.url().split("/room/")[1].toUpperCase();
+
+    // Short wait to ensure room registration in memory
+    await sleep(500);
+
+    await qpPage2.goto(BASE_URL);
+    await qpPage2.waitForSelector('.name-section input');
+    await qpPage2.fill('.name-section input', "QuickUser2");
+    await qpPage2.click('button.btn-quick-play');
+    await qpPage2.waitForURL(/\/room\/[A-Z0-9]+/);
+    const qpRoom2 = qpPage2.url().split("/room/")[1].toUpperCase();
+
+    if (qpRoom1 === qpRoom2) {
+      console.log(`PASS: Quick play put two players in the same room (${qpRoom1})`);
+    } else {
+      console.error(`FAIL: Quick play placed players in different rooms: ${qpRoom1} vs ${qpRoom2}`);
+      process.exit(1);
+    }
+
+    await qpPage1.click('button:has-text("Leave")').catch(() => {});
+    await qpPage2.click('button:has-text("Leave")').catch(() => {});
+    await qpContext1.close();
+    await qpContext2.close();
+
     // 2. Host creates room
     await hostPage.goto(BASE_URL);
     await hostPage.waitForSelector('.name-section input');
@@ -157,13 +192,37 @@ async function run() {
     console.log(`PASS: Room ${roomCode} created and 3 players joined via code and invite link`);
     await hostPage.screenshot({ path: path.join(SCREENSHOT_DIR, "02_lobby_three_players.png") });
 
+    // Check non-hosts cannot kick (no Kick/Ban buttons visible to them)
+    const p2KickCount = await p2Page.locator('button.btn-kick, button:has-text("Kick")').count();
+    const p3KickCount = await p3Page.locator('button.btn-kick, button:has-text("Kick")').count();
+    if (p2KickCount > 0 || p3KickCount > 0) {
+      console.error(`FAIL: Non-host should see no kick buttons, but p2 saw ${p2KickCount}, p3 saw ${p3KickCount}`);
+      process.exit(1);
+    }
+    console.log("PASS: Non-hosts cannot kick (no Kick buttons visible to them)");
+
+    // Check host's Start button is disabled before non-host players ready up
+    const isStartDisabledInitially = await hostPage.locator('button.btn-start').isDisabled();
+    if (!isStartDisabledInitially) {
+      console.error("FAIL: Host start button should be disabled before non-hosts are ready");
+      process.exit(1);
+    }
+    console.log("PASS: Host Start button is disabled before non-hosts ready up");
+
+    // Non-host players click Ready
+    await p2Page.click('button.btn-ready');
+    await p3Page.click('button.btn-ready');
+
+    // Check host's Start button is enabled after all non-hosts are ready
+    await hostPage.waitForSelector('button.btn-start:not([disabled])', { timeout: 10000 });
+    console.log("PASS: Host Start button is enabled after all non-hosts ready up");
+
     // Collect secret tokens
     const hostToken = await getStoredToken(hostPage);
     const p2Token = await getStoredToken(p2Page);
     const p3Token = await getStoredToken(p3Page);
 
     // 3. Host starts game
-    await hostPage.waitForSelector('button.btn-start:not([disabled])');
     await hostPage.click('button.btn-start');
 
     await Promise.all([
