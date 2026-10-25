@@ -39,6 +39,12 @@ export default function Home() {
   const [joinCode, setJoinCode] = useState("");
   const [publicRooms, setPublicRooms] = useState<PublicRoom[]>([]);
 
+  const customWordsCount = customWordsText
+    .split(/[,\n\r]+/)
+    .map((w) => w.trim())
+    .filter((w) => w.length > 0).length;
+  const isCustomOnlyDisabled = customWordsCount < settings.wordCount;
+
   useEffect(() => {
     fetchPublicRooms();
     const timer = setInterval(fetchPublicRooms, 4000);
@@ -99,6 +105,7 @@ export default function Home() {
     const finalSettings: RoomSettings = {
       ...settings,
       customWords: Array.from(new Set(customWords)).slice(0, 100),
+      useCustomOnly: isCustomOnlyDisabled ? false : settings.useCustomOnly,
     };
     socket.emit(SocketEvent.CreateRoom, { name: n, settings: finalSettings, deviceId }, (res: any) => {
       if (res.error) return addToast(res.error);
@@ -156,6 +163,10 @@ export default function Home() {
             maxLength={20}
             className="input"
             style={{ flex: 1 }}
+            spellCheck={false}
+            autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="words"
           />
         </div>
       </div>
@@ -258,13 +269,19 @@ export default function Home() {
                       rows={3}
                     />
                   </label>
-                  <label className="toggle-row">
+                  <label className="toggle-row" style={{ opacity: isCustomOnlyDisabled ? 0.6 : 1, cursor: isCustomOnlyDisabled ? "not-allowed" : "pointer" }}>
                     <input
                       type="checkbox"
-                      checked={settings.useCustomOnly}
+                      checked={settings.useCustomOnly && !isCustomOnlyDisabled}
+                      disabled={isCustomOnlyDisabled}
                       onChange={(e) => updateSetting("useCustomOnly", e.target.checked)}
                     />
                     Use custom words exclusively
+                    {isCustomOnlyDisabled && (
+                      <span style={{ fontSize: "var(--fs-xs)", color: "var(--text-muted)" }}>
+                        (needs {settings.wordCount}+ words)
+                      </span>
+                    )}
                   </label>
                 </div>
               </details>

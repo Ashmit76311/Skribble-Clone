@@ -1,4 +1,4 @@
-import { useEffect, useState, FormEvent } from "react";
+import { useEffect, useState, useRef, FormEvent } from "react";
 import { useParams, useLocation, useNavigate } from "react-router-dom";
 import { socket, deviceId } from "../socket";
 import { GamePhase, SocketEvent } from "@skribbl/shared";
@@ -61,13 +61,33 @@ export default function Lobby() {
   const [useCustomOnlyInput, setUseCustomOnlyInput] = useState<boolean>(false);
   const [hasEditedCustomWords, setHasEditedCustomWords] = useState(false);
 
+  const hasTerminatedRef = useRef(false);
+  const [isDropUp, setIsDropUp] = useState(false);
+  const [activeMenuPlayerId, setActiveMenuPlayerId] = useState<string | null>(null);
+  const [confirmKick, setConfirmKick] = useState<{ playerId: string; ban: boolean } | null>(null);
+
+  useEffect(() => {
+    if (!activeMenuPlayerId) return;
+    const close = () => setActiveMenuPlayerId(null);
+    window.addEventListener("click", close);
+    return () => window.removeEventListener("click", close);
+  }, [activeMenuPlayerId]);
+
   function performRejoin(token: string) {
+    if (hasTerminatedRef.current) return;
     socket.emit(
       SocketEvent.RejoinRoom,
       { code: code!, token, deviceId },
       (res: RejoinRoomResponse) => {
+        if (hasTerminatedRef.current) return;
         if (res.error) {
           clearStoredSession(code!);
+          const lower = res.error.toLowerCase();
+          if (lower.includes("ban") || lower.includes("kick") || lower.includes("not found")) {
+            hasTerminatedRef.current = true;
+            navigate("/", { replace: true, state: { toast: res.error } });
+            return;
+          }
           const saved = localStorage.getItem("name");
           if (saved) {
             joinRoom(saved);
@@ -91,13 +111,27 @@ export default function Lobby() {
   }
 
   function joinRoom(playerName: string) {
+    if (hasTerminatedRef.current) return;
     socket.emit(
       SocketEvent.JoinRoom,
       { name: playerName, code: code!, deviceId },
       (res: any) => {
+        if (hasTerminatedRef.current) return;
         if (res.error) {
+          clearStoredSession(code!);
+          const lower = res.error.toLowerCase();
+          if (lower.includes("ban") || lower.includes("kick") || lower.includes("not found")) {
+            hasTerminatedRef.current = true;
+            navigate("/", { replace: true, state: { toast: res.error } });
+            return;
+          }
           addToast(res.error);
-          setTimeout(() => navigate("/"), 2000);
+          setTimeout(() => {
+            if (!hasTerminatedRef.current) {
+              hasTerminatedRef.current = true;
+              navigate("/", { replace: true });
+            }
+          }, 2000);
           return;
         }
         if (res.token) {
@@ -111,6 +145,7 @@ export default function Lobby() {
   }
 
   useEffect(() => {
+    if (hasTerminatedRef.current) return;
     const session = code ? getStoredSession(code) : null;
 
     if (session?.token) {
@@ -130,6 +165,7 @@ export default function Lobby() {
     }
 
     function handleConnect() {
+      if (hasTerminatedRef.current) return;
       const activeSession = code ? getStoredSession(code) : null;
       if (activeSession?.token) {
         performRejoin(activeSession.token);
@@ -164,8 +200,11 @@ export default function Lobby() {
 
   function onKicked(data: { message?: string; banned?: boolean }) {
     if (code) clearStoredSession(code);
+    if (hasTerminatedRef.current) return;
+    hasTerminatedRef.current = true;
     navigate("/", {
-      state: { toast: data.message || "You were kicked from the room" },
+      replace: true,
+      state: { toast: data.message || (data.banned ? "You were banned from the room" : "You were kicked from the room") },
     });
   }
 
@@ -223,6 +262,14 @@ export default function Lobby() {
   }
 
   function onError(data: ErrorPayload) {
+    if (hasTerminatedRef.current) return;
+    const lower = data.message?.toLowerCase() || "";
+    if (lower.includes("ban") || lower.includes("kick") || lower.includes("not found")) {
+      if (code) clearStoredSession(code);
+      hasTerminatedRef.current = true;
+      navigate("/", { replace: true, state: { toast: data.message } });
+      return;
+    }
     addToast(data.message);
   }
 
@@ -266,12 +313,6 @@ export default function Lobby() {
   const me = room?.players.find((p) => p.id === myPlayerId);
   const myReady = me?.isReady ?? false;
 
-  const [confirmKick, setConfirmKick] = useState<{
-    playerId: string;
-    ban: boolean;
-  } | null>(null);
-  const [activeMenuPlayerId, setActiveMenuPlayerId] = useState<string | null>(null);
-
   function executeKick(playerId: string, ban: boolean) {
     socket.emit(SocketEvent.KickPlayer, { playerId, ban });
     setConfirmKick(null);
@@ -292,10 +333,17 @@ export default function Lobby() {
   }, [room?.settings.customWords, room?.settings.useCustomOnly, hasEditedCustomWords]);
 
   function saveCustomWords() {
+    const wordCount = room?.settings?.wordCount ?? 3;
+    const count = customWordsInput
+      .split(/[,\n\r]+/)
+      .map((w) => w.trim())
+      .filter((w) => w.length > 0).length;
+    const isCustomOnlyDisabled = count < wordCount;
+
     socket.emit(SocketEvent.UpdateSettings, {
       settings: {
         customWords: customWordsInput,
-        useCustomOnly: useCustomOnlyInput,
+        useCustomOnly: isCustomOnlyDisabled ? false : useCustomOnlyInput,
       },
     });
     setHasEditedCustomWords(false);
@@ -317,6 +365,10 @@ export default function Lobby() {
               maxLength={20}
               className="input"
               autoFocus
+              spellCheck={false}
+              autoComplete="off"
+              autoCorrect="off"
+              autoCapitalize="words"
             />
             <button type="submit" className="btn btn-primary">
               Join
@@ -411,13 +463,17 @@ export default function Lobby() {
                         aria-label="Player actions"
                         onClick={(e) => {
                           e.stopPropagation();
+                          const btn = e.currentTarget;
+                          const rect = btn.getBoundingClientRect();
+                          const openUp = window.innerHeight - rect.bottom < 110;
+                          setIsDropUp(openUp);
                           setActiveMenuPlayerId(activeMenuPlayerId === p.id ? null : p.id);
                         }}
                       >
                         ⋯
                       </button>
                       {activeMenuPlayerId === p.id && (
-                        <div className="player-menu-dropdown">
+                        <div className={`player-menu-dropdown ${isDropUp ? "drop-up" : ""}`}>
                           <button
                             type="button"
                             className="player-menu-item btn-kick"
@@ -500,17 +556,43 @@ export default function Lobby() {
                 style={{ width: "100%", marginTop: "0.25rem" }}
               />
             </label>
-            <label className="toggle-row" style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.75rem" }}>
-              <input
-                type="checkbox"
-                checked={useCustomOnlyInput}
-                onChange={(e) => {
-                  setUseCustomOnlyInput(e.target.checked);
-                  setHasEditedCustomWords(true);
-                }}
-              />
-              Use custom words exclusively
-            </label>
+            {(() => {
+              const wordCount = room.settings?.wordCount ?? 3;
+              const count = customWordsInput
+                .split(/[,\n\r]+/)
+                .map((w) => w.trim())
+                .filter((w) => w.length > 0).length;
+              const isDisabled = count < wordCount;
+              return (
+                <label
+                  className="toggle-row"
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "0.5rem",
+                    marginBottom: "0.75rem",
+                    opacity: isDisabled ? 0.6 : 1,
+                    cursor: isDisabled ? "not-allowed" : "pointer",
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={useCustomOnlyInput && !isDisabled}
+                    disabled={isDisabled}
+                    onChange={(e) => {
+                      setUseCustomOnlyInput(e.target.checked);
+                      setHasEditedCustomWords(true);
+                    }}
+                  />
+                  Use custom words exclusively
+                  {isDisabled && (
+                    <span style={{ fontSize: "var(--fs-xs)", color: "var(--text-muted)" }}>
+                      (needs {wordCount}+ words)
+                    </span>
+                  )}
+                </label>
+              );
+            })()}
             <button className="btn btn-sm btn-secondary" onClick={saveCustomWords}>
               Save Words
             </button>

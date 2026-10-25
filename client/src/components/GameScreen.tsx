@@ -83,7 +83,15 @@ export default function GameScreen({
     ban: boolean;
   } | null>(null);
   const [activeMenuPlayerId, setActiveMenuPlayerId] = useState<string | null>(null);
+  const [isDropUp, setIsDropUp] = useState(false);
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
+
+  useEffect(() => {
+    if (!activeMenuPlayerId) return;
+    const close = () => setActiveMenuPlayerId(null);
+    window.addEventListener("click", close);
+    return () => window.removeEventListener("click", close);
+  }, [activeMenuPlayerId]);
 
   function executeKick(playerId: string, ban: boolean) {
     socket.emit(SocketEvent.KickPlayer, { playerId, ban });
@@ -552,13 +560,77 @@ export default function GameScreen({
                   }`}
                 >
                   <div className="player-meta">
-                    <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", minWidth: 0, flex: 1 }}>
+                    <div className="player-meta-info">
                       <Avatar name={p.name} seed={p.id} size="sm" />
                       <span className="player-name" title={p.name}>
                         #{idx + 1} {p.name}
                       </span>
                     </div>
-                    <span className="player-score">{p.score} pts</span>
+                    <div className="player-meta-right">
+                      <span className="player-score">{p.score} pts</span>
+                      {isHost && p.id !== myPlayerId && room.phase !== GamePhase.GAME_OVER && (
+                        confirmKick?.playerId === p.id ? (
+                          <span className="confirm-group">
+                            <button
+                              type="button"
+                              className="btn btn-xs btn-danger"
+                              onClick={() => executeKick(p.id, confirmKick.ban)}
+                            >
+                              {confirmKick.ban ? "Ban?" : "Kick?"}
+                            </button>
+                            <button
+                              type="button"
+                              className="btn btn-xs"
+                              onClick={() => setConfirmKick(null)}
+                            >
+                              ✕
+                            </button>
+                          </span>
+                        ) : (
+                          <div className="player-menu-wrapper">
+                            <button
+                              type="button"
+                              className="player-menu-btn player-menu-btn-sm"
+                              aria-label="Player actions"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const btn = e.currentTarget;
+                                const rect = btn.getBoundingClientRect();
+                                const openUp = window.innerHeight - rect.bottom < 110;
+                                setIsDropUp(openUp);
+                                setActiveMenuPlayerId(activeMenuPlayerId === p.id ? null : p.id);
+                              }}
+                            >
+                              ⋯
+                            </button>
+                            {activeMenuPlayerId === p.id && (
+                              <div className={`player-menu-dropdown ${isDropUp ? "drop-up" : ""}`}>
+                                <button
+                                  type="button"
+                                  className="player-menu-item btn-kick"
+                                  onClick={() => {
+                                    setActiveMenuPlayerId(null);
+                                    setConfirmKick({ playerId: p.id, ban: false });
+                                  }}
+                                >
+                                  Kick
+                                </button>
+                                <button
+                                  type="button"
+                                  className="player-menu-item btn-ban"
+                                  onClick={() => {
+                                    setActiveMenuPlayerId(null);
+                                    setConfirmKick({ playerId: p.id, ban: true });
+                                  }}
+                                >
+                                  Ban
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        )
+                      )}
+                    </div>
                   </div>
                   {flash && flash.points > 0 && (
                     <span className="floating-points">+{flash.points}</span>
@@ -570,66 +642,6 @@ export default function GameScreen({
                     {p.isHost && <span className="host-badge">Host</span>}
                     {p.id === myPlayerId && <span className="you-badge">You</span>}
                   </div>
-                  {isHost && p.id !== myPlayerId && room.phase !== GamePhase.GAME_OVER && (
-                    <div className="sidebar-player-actions">
-                      {confirmKick?.playerId === p.id ? (
-                        <span className="confirm-group">
-                          <button
-                            type="button"
-                            className="btn btn-xs btn-danger"
-                            onClick={() => executeKick(p.id, confirmKick.ban)}
-                          >
-                            Confirm {confirmKick.ban ? "Ban" : "Kick"}?
-                          </button>
-                          <button
-                            type="button"
-                            className="btn btn-xs"
-                            onClick={() => setConfirmKick(null)}
-                          >
-                            ✕
-                          </button>
-                        </span>
-                      ) : (
-                        <div className="player-menu-wrapper">
-                          <button
-                            type="button"
-                            className="player-menu-btn"
-                            aria-label="Player actions"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setActiveMenuPlayerId(activeMenuPlayerId === p.id ? null : p.id);
-                            }}
-                          >
-                            ⋯
-                          </button>
-                          {activeMenuPlayerId === p.id && (
-                            <div className="player-menu-dropdown">
-                              <button
-                                type="button"
-                                className="player-menu-item btn-kick"
-                                onClick={() => {
-                                  setActiveMenuPlayerId(null);
-                                  setConfirmKick({ playerId: p.id, ban: false });
-                                }}
-                              >
-                                Kick
-                              </button>
-                              <button
-                                type="button"
-                                className="player-menu-item btn-ban"
-                                onClick={() => {
-                                  setActiveMenuPlayerId(null);
-                                  setConfirmKick({ playerId: p.id, ban: true });
-                                }}
-                              >
-                                Ban
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  )}
                 </li>
               );
             })}

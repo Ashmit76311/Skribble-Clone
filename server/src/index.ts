@@ -69,7 +69,10 @@ if (isProd) {
     possiblePaths.find((p) => fs.existsSync(p)) || possiblePaths[0];
 
   app.use(express.static(clientDist));
-  app.get("*", (_req, res) => {
+  app.get("*", (req, res) => {
+    if (path.extname(req.path)) {
+      return res.status(404).send("Not Found");
+    }
     res.sendFile(path.join(clientDist, "index.html"));
   });
 }
