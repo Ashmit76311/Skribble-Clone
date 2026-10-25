@@ -31,4 +31,5 @@ export enum SocketEvent {
   PlayerReady = "player_ready",
   KickPlayer = "kick_player",
   Kicked = "kicked",
+  UpdateSettings = "update_settings",
 }

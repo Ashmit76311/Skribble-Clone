@@ -9,6 +9,7 @@ import type {
   DrawMovePayload,
   ChatMessagePayload,
   KickPlayerPayload,
+  UpdateSettingsPayload,
 } from "@skribbl/shared";
 import { RoomManager } from "./RoomManager.js";
 import { Player } from "./Player.js";
@@ -46,7 +47,7 @@ export function registerHandlers(io: Server, manager: RoomManager) {
       socket.join(room.code);
       manager.trackSocket(socket.id, room.code);
       cb({
-        room: room.toJSON(),
+        room: room.toJSON(player.id),
         token: player.token,
         playerId: player.id,
       });
@@ -77,7 +78,7 @@ export function registerHandlers(io: Server, manager: RoomManager) {
       });
 
       cb({
-        room: room.toJSON(),
+        room: room.toJSON(player.id),
         token: player.token,
         playerId: player.id,
       });
@@ -142,18 +143,14 @@ export function registerHandlers(io: Server, manager: RoomManager) {
 
       const roomData = room.game
         ? room.game.buildRoomData(player.id)
-        : room.toJSON();
+        : room.toJSON(player.id);
       const strokes = room.game ? room.game.currentStrokes : [];
       const chatHistory = room.getChatHistoryForPlayer(player);
 
       if (room.game) {
         room.game.broadcastState();
       } else {
-        room.broadcast(io, SocketEvent.GameState, {
-          room: room.toJSON(),
-          strokes: [],
-          hint: null,
-        });
+        room.broadcastLobbyState(io);
       }
 
       const wordOptions =
@@ -193,11 +190,21 @@ export function registerHandlers(io: Server, manager: RoomManager) {
       const player = room.getPlayerBySocketId(socket.id);
       if (!player || player.isHost) return;
       player.isReady = !!data?.ready;
-      room.broadcast(io, SocketEvent.GameState, {
-        room: room.toJSON(),
-        strokes: [],
-        hint: null,
-      });
+      room.broadcastLobbyState(io);
+    });
+
+    socket.on(SocketEvent.UpdateSettings, (data: UpdateSettingsPayload) => {
+      const room = manager.getRoomForSocket(socket.id);
+      if (!room || room.phase !== GamePhase.LOBBY) return;
+      const player = room.getPlayerBySocketId(socket.id);
+      if (!player?.isHost) {
+        return socket.emit(SocketEvent.Error, {
+          message: "Only the host can update room settings",
+        });
+      }
+      if (!data?.settings) return;
+      room.updateSettings(data.settings);
+      room.broadcastLobbyState(io);
     });
 
     socket.on(SocketEvent.KickPlayer, (data: KickPlayerPayload) => {
@@ -269,11 +276,7 @@ export function registerHandlers(io: Server, manager: RoomManager) {
       if (room.game) {
         room.game.broadcastState();
       } else {
-        room.broadcast(io, SocketEvent.GameState, {
-          room: room.toJSON(),
-          strokes: [],
-          hint: null,
-        });
+        room.broadcastLobbyState(io);
       }
     });
 
@@ -394,7 +397,7 @@ export function registerHandlers(io: Server, manager: RoomManager) {
         });
       } else {
         socket.emit(SocketEvent.GameState, {
-          room: room.toJSON(),
+          room: room.toJSON(player.id),
           strokes: [],
           hint: null,
         });
@@ -423,11 +426,7 @@ export function registerHandlers(io: Server, manager: RoomManager) {
       if (room.game) {
         room.game.broadcastState();
       } else {
-        room.broadcast(io, SocketEvent.GameState, {
-          room: room.toJSON(),
-          strokes: [],
-          hint: null,
-        });
+        room.broadcastLobbyState(io);
       }
 
       // Start 30s grace timer

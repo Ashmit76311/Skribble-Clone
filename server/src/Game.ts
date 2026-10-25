@@ -80,7 +80,15 @@ export class Game {
     this.players = players;
     this.onEnd = onEnd;
     this.onChatMessage = onChatMessage;
-    this.wordPool = allWords();
+
+    const custom = this.settings.customWords ?? [];
+    if (this.settings.useCustomOnly && custom.length >= this.settings.wordCount) {
+      this.wordPool = [...custom];
+    } else if (custom.length > 0) {
+      this.wordPool = Array.from(new Set([...custom, ...allWords()]));
+    } else {
+      this.wordPool = allWords();
+    }
   }
 
   get currentPhase() {
@@ -138,20 +146,26 @@ export class Game {
     if (!drawer) return this.endGame();
     drawer.isDrawing = true;
 
-    const available = this.wordPool.filter((w) => !this.usedWords.has(w));
-    if (available.length < this.settings.wordCount * 2) {
-      this.usedWords.clear();
-    }
-    const pool = this.wordPool.filter((w) => !this.usedWords.has(w));
+    const isCombo = this.settings.wordMode === WordMode.Combination;
+    const minNeeded = isCombo ? 2 : this.settings.wordCount;
 
-    if (this.settings.wordMode === WordMode.Combination) {
+    let available = this.wordPool.filter((w) => !this.usedWords.has(w));
+    if (available.length < Math.min(this.wordPool.length, minNeeded)) {
+      this.usedWords.clear();
+      available = this.wordPool;
+    }
+
+    if (isCombo) {
       this.wordOptions = [];
       for (let i = 0; i < this.settings.wordCount; i++) {
-        const pair = pickRandom(pool, 2);
+        const pair = pickRandom(available, Math.min(available.length, 2));
         this.wordOptions.push(pair.join(" "));
       }
     } else {
-      this.wordOptions = pickRandom(pool, this.settings.wordCount);
+      this.wordOptions = pickRandom(
+        available,
+        Math.min(available.length, this.settings.wordCount)
+      );
     }
 
     this.endsAt = Date.now() + WORD_SELECT_TIME;
@@ -186,6 +200,9 @@ export class Game {
 
     this.currentWord = word;
     this.usedWords.add(word);
+    if (this.settings.wordMode === WordMode.Combination) {
+      word.split(" ").forEach((part) => this.usedWords.add(part));
+    }
     this.phase = GamePhase.DRAWING;
     this.clearTimer();
     this.clearHintTimers();
@@ -713,7 +730,10 @@ export class Game {
     const data: RoomData = {
       code: this.roomCode,
       players: this.players.map((p) => p.toJSON()),
-      settings: this.settings,
+      settings: {
+        ...this.settings,
+        customWords: [],
+      },
       phase: this.phase,
       hostId: host?.id ?? "",
       currentRound: Math.min(this.round, this.settings.rounds),

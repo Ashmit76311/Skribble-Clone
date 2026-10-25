@@ -18,7 +18,7 @@ export class HintManager {
 
     const letterIndices: number[] = [];
     for (let i = 0; i < word.length; i++) {
-      if (word[i] !== " ") letterIndices.push(i);
+      if (word[i] !== " " && word[i] !== "-") letterIndices.push(i);
     }
 
     // Never reveal more than half of the letters
@@ -52,6 +52,8 @@ export class HintManager {
       const char = this.word[i];
       if (char === " ") {
         parts.push(" ");
+      } else if (char === "-") {
+        parts.push("-");
       } else if (this.revealedIndices.has(i)) {
         parts.push(char);
       } else {
@@ -66,7 +68,7 @@ export class HintManager {
     if (this.mode === WordMode.Hidden) {
       return null;
     }
-    // Number of letters excluding spaces
-    return this.word.replace(/\s+/g, "").length;
+    // Number of letters excluding spaces and hyphens
+    return this.word.replace(/[\s-]+/g, "").length;
   }
 }

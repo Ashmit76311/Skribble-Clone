@@ -56,6 +56,10 @@ export default function Lobby() {
   const [initialMessages, setInitialMessages] = useState<ChatMessagePayload[]>([]);
   const [initialWordOptions, setInitialWordOptions] = useState<string[]>([]);
 
+  const [customWordsInput, setCustomWordsInput] = useState<string>("");
+  const [useCustomOnlyInput, setUseCustomOnlyInput] = useState<boolean>(false);
+  const [hasEditedCustomWords, setHasEditedCustomWords] = useState(false);
+
   function performRejoin(token: string) {
     socket.emit(
       SocketEvent.RejoinRoom,
@@ -275,6 +279,26 @@ export default function Lobby() {
     socket.emit(SocketEvent.PlayerReady, { ready: !myReady });
   }
 
+  useEffect(() => {
+    if (room?.settings && !hasEditedCustomWords) {
+      if (room.settings.customWords && room.settings.customWords.length > 0) {
+        setCustomWordsInput(room.settings.customWords.join(", "));
+      }
+      setUseCustomOnlyInput(!!room.settings.useCustomOnly);
+    }
+  }, [room?.settings.customWords, room?.settings.useCustomOnly, hasEditedCustomWords]);
+
+  function saveCustomWords() {
+    socket.emit(SocketEvent.UpdateSettings, {
+      settings: {
+        customWords: customWordsInput,
+        useCustomOnly: useCustomOnlyInput,
+      },
+    });
+    setHasEditedCustomWords(false);
+    addToast("Settings updated");
+  }
+
   if (needsName) {
     return (
       <div className="home">
@@ -404,7 +428,43 @@ export default function Lobby() {
           <span>Word Count: {room.settings.wordCount}</span>
           <span>Hints: {room.settings.hints}</span>
           <span>Mode: {room.settings.wordMode}</span>
+          {room.settings.useCustomOnly && <span>Custom words only</span>}
+          {room.settings.customWords && room.settings.customWords.length > 0 && (
+            <span>Custom words: {room.settings.customWords.length}</span>
+          )}
         </div>
+        {isHost && (
+          <div className="custom-words-lobby" style={{ marginTop: "1rem" }}>
+            <label style={{ display: "block", marginBottom: "0.5rem" }}>
+              Custom Words (comma or new line separated)
+              <textarea
+                className="input custom-words-textarea"
+                placeholder="cat, dog, space ship..."
+                value={customWordsInput}
+                onChange={(e) => {
+                  setCustomWordsInput(e.target.value);
+                  setHasEditedCustomWords(true);
+                }}
+                rows={3}
+                style={{ width: "100%", marginTop: "0.25rem" }}
+              />
+            </label>
+            <label className="toggle-row" style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.75rem" }}>
+              <input
+                type="checkbox"
+                checked={useCustomOnlyInput}
+                onChange={(e) => {
+                  setUseCustomOnlyInput(e.target.checked);
+                  setHasEditedCustomWords(true);
+                }}
+              />
+              Use custom words exclusively
+            </label>
+            <button className="btn btn-sm btn-secondary" onClick={saveCustomWords}>
+              Save Words
+            </button>
+          </div>
+        )}
       </div>
 
       {!isHost && (

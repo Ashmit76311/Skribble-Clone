@@ -17,6 +17,8 @@ const defaults: RoomSettings = {
   hints: 2,
   wordMode: WordMode.Normal,
   isPublic: true,
+  customWords: [],
+  useCustomOnly: false,
 };
 
 interface PublicRoom {
@@ -32,6 +34,7 @@ export default function Home() {
   const { toasts, addToast } = useToast();
   const [name, setName] = useState(() => localStorage.getItem("name") || "");
   const [settings, setSettings] = useState<RoomSettings>({ ...defaults });
+  const [customWordsText, setCustomWordsText] = useState("");
   const [joinCode, setJoinCode] = useState("");
   const [publicRooms, setPublicRooms] = useState<PublicRoom[]>([]);
 
@@ -67,7 +70,17 @@ export default function Home() {
     e.preventDefault();
     const n = saveName();
     if (!n) return;
-    socket.emit(SocketEvent.CreateRoom, { name: n, settings }, (res: any) => {
+    const customWords = customWordsText
+      ? customWordsText
+          .split(/[,\n\r]+/)
+          .map((w) => w.trim().toLowerCase())
+          .filter((w) => w.length >= 2 && w.length <= 30 && /^[a-z -]+$/.test(w) && /[a-z]/.test(w))
+      : [];
+    const finalSettings: RoomSettings = {
+      ...settings,
+      customWords: Array.from(new Set(customWords)).slice(0, 100),
+    };
+    socket.emit(SocketEvent.CreateRoom, { name: n, settings: finalSettings }, (res: any) => {
       if (res.error) return addToast(res.error);
       if (res.token) {
         sessionStorage.setItem(
@@ -187,6 +200,26 @@ export default function Home() {
                 <option value={WordMode.Hidden}>Hidden</option>
                 <option value={WordMode.Combination}>Combination</option>
               </select>
+            </label>
+          </div>
+          <div className="custom-words-field">
+            <label>
+              Custom Words
+              <textarea
+                className="input custom-words-textarea"
+                placeholder="Custom words separated by commas or new lines..."
+                value={customWordsText}
+                onChange={(e) => setCustomWordsText(e.target.value)}
+                rows={3}
+              />
+            </label>
+            <label className="toggle-row">
+              <input
+                type="checkbox"
+                checked={settings.useCustomOnly}
+                onChange={(e) => updateSetting("useCustomOnly", e.target.checked)}
+              />
+              Use custom words exclusively
             </label>
           </div>
           <label className="toggle-row">

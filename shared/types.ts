@@ -20,6 +20,8 @@ export interface RoomSettings {
   hints: number;
   wordMode: WordMode;
   isPublic: boolean;
+  customWords: string[];
+  useCustomOnly: boolean;
 }
 
 export interface PlayerData {
@@ -222,5 +224,9 @@ export interface KickPlayerPayload {
 export interface KickedPayload {
   message: string;
   banned?: boolean;
+}
+
+export interface UpdateSettingsPayload {
+  settings: Partial<RoomSettings>;
 }
 

@@ -1,10 +1,48 @@
 import { Server } from "socket.io";
-import { GamePhase, RoomData, RoomSettings, WordMode, ChatMessagePayload } from "@skribbl/shared";
+import {
+  GamePhase,
+  RoomData,
+  RoomSettings,
+  WordMode,
+  ChatMessagePayload,
+  SocketEvent,
+} from "@skribbl/shared";
 import { Player } from "./Player.js";
 import { Game } from "./Game.js";
 
 function clamp(v: number, min: number, max: number) {
   return Math.max(min, Math.min(max, Math.round(v)));
+}
+
+export function validateCustomWords(raw: unknown): string[] {
+  if (!raw) return [];
+  const rawList: string[] = Array.isArray(raw)
+    ? raw.flatMap((s) => (typeof s === "string" ? s.split(/[,\n\r]+/) : []))
+    : typeof raw === "string"
+    ? raw.split(/[,\n\r]+/)
+    : [];
+
+  const seen = new Set<string>();
+  const result: string[] = [];
+
+  for (const item of rawList) {
+    const cleaned = item.trim().toLowerCase();
+    // 2 to 30 characters each, letters, spaces and hyphens only, must contain at least one letter
+    if (
+      cleaned.length >= 2 &&
+      cleaned.length <= 30 &&
+      /^[a-z -]+$/.test(cleaned) &&
+      /[a-z]/.test(cleaned)
+    ) {
+      if (!seen.has(cleaned)) {
+        seen.add(cleaned);
+        result.push(cleaned);
+        if (result.length >= 100) break;
+      }
+    }
+  }
+
+  return result;
 }
 
 export function validateSettings(raw: Partial<RoomSettings>): RoomSettings {
@@ -18,6 +56,8 @@ export function validateSettings(raw: Partial<RoomSettings>): RoomSettings {
       ? (raw.wordMode as WordMode)
       : WordMode.Normal,
     isPublic: typeof raw.isPublic === "boolean" ? raw.isPublic : true,
+    customWords: validateCustomWords(raw.customWords),
+    useCustomOnly: typeof raw.useCustomOnly === "boolean" ? raw.useCustomOnly : false,
   };
 }
 
@@ -187,15 +227,54 @@ export class Room {
     });
   }
 
+  updateSettings(newSettings: Partial<RoomSettings>) {
+    this.settings = validateSettings({
+      ...this.settings,
+      ...newSettings,
+    });
+  }
+
   broadcast(io: Server, event: string, data: unknown) {
     io.to(this.code).emit(event, data);
   }
 
-  toJSON(): RoomData {
+  broadcastLobbyState(io: Server) {
+    // Broadcast sanitized lobby state (customWords: []) to all players in the room
+    io.to(this.code).emit(SocketEvent.GameState, {
+      room: this.toJSON(),
+      strokes: [],
+      hint: null,
+    });
+    // Send full lobby state (with customWords) specifically to the host
+    if (this.host && this.host.isConnected && this.host.socketId) {
+      const hostSocket = io.sockets.sockets.get(this.host.socketId);
+      if (hostSocket) {
+        hostSocket.emit(SocketEvent.GameState, {
+          room: this.toJSON(this.host.id),
+          strokes: [],
+          hint: null,
+        });
+      } else {
+        io.to(this.host.socketId).emit(SocketEvent.GameState, {
+          room: this.toJSON(this.host.id),
+          strokes: [],
+          hint: null,
+        });
+      }
+    }
+  }
+
+  toJSON(forPlayerId?: string): RoomData {
+    const isHost = this.host?.id === forPlayerId;
+    const isLobby = this.phase === GamePhase.LOBBY;
+    const settingsToSend: RoomSettings = {
+      ...this.settings,
+      customWords: isHost && isLobby ? this.settings.customWords : [],
+    };
     return {
       code: this.code,
       players: this.players.map((p) => p.toJSON()),
-      settings: this.settings,
+      settings: settingsToSend,
       phase: this.game ? this.game.currentPhase : this.phase,
       hostId: this.host?.id ?? "",
       currentRound: this.game ? this.game.currentRound : 0,
