@@ -466,6 +466,17 @@ export default function GameScreen({
   const sortedPlayers = [...room.players].sort((a, b) => b.score - a.score);
   const sortedLeaderboard = (gameOverData?.leaderboard ?? sortedPlayers);
 
+  const isTimedPhase =
+    room.phase === GamePhase.WORD_SELECT || room.phase === GamePhase.DRAWING;
+  const timerClass =
+    isTimedPhase && timeLeft > 0
+      ? timeLeft <= 10
+        ? "timer-red"
+        : timeLeft <= 20
+        ? "timer-amber"
+        : ""
+      : "";
+
   return (
     <div className="game-screen">
       <header className="game-topbar">
@@ -476,16 +487,8 @@ export default function GameScreen({
         </div>
         <div className="topbar-center">{renderWordPrompt()}</div>
         <div className="topbar-right">
-          <span
-            className={`timer-badge ${
-              timeLeft > 0 && timeLeft <= 10
-                ? "timer-red"
-                : timeLeft > 0 && timeLeft <= 20
-                ? "timer-amber"
-                : ""
-            }`}
-          >
-            {timeLeft}s
+          <span className={`timer-badge ${timerClass}`}>
+            {isTimedPhase ? `${timeLeft}s` : "—"}
           </span>
           <button
             type="button"
@@ -507,12 +510,10 @@ export default function GameScreen({
           <h3>Scoreboard</h3>
           <ul className="sidebar-player-list">
             {sortedPlayers.map((p, idx) => {
-              const isGameActive =
-                room.phase !== GamePhase.GAME_OVER &&
-                room.phase !== GamePhase.LOBBY;
               const drawing =
-                isGameActive && (p.isDrawing || p.id === room.currentDrawer);
-              const guessed = isGameActive && p.hasGuessed;
+                isTimedPhase && (p.isDrawing || p.id === room.currentDrawer);
+              const guessed =
+                room.phase === GamePhase.DRAWING && p.hasGuessed;
               const flash = flashes[p.id];
               return (
                 <li
@@ -524,9 +525,9 @@ export default function GameScreen({
                   }`}
                 >
                   <div className="player-meta">
-                    <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", minWidth: 0 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", minWidth: 0, flex: 1 }}>
                       <Avatar name={p.name} seed={p.id} size="sm" />
-                      <span className="player-name">
+                      <span className="player-name" title={p.name}>
                         #{idx + 1} {p.name}
                       </span>
                     </div>
@@ -650,14 +651,15 @@ export default function GameScreen({
                         key={p.id}
                         className={`score-item ${diff > 0 ? "score-item-highlight" : ""}`}
                       >
-                        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", minWidth: 0, flex: 1 }}>
                           <Avatar name={p.name} seed={p.id} size="sm" />
-                          <span className="score-name">{p.name}</span>
+                          <span className="score-name" title={p.name}>{p.name}</span>
                         </div>
-                        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                          {diff > 0 && (
-                            <span className="score-diff count-up">+{diff} pts</span>
-                          )}
+                        {diff > 0 && (
+                          <span className="score-diff count-up">+{diff}</span>
+                        )}
+                        <div className="score-total-col">
+                          <span className="score-total-label">total</span>
                           <span className="score-total">
                             {roundEndScores[p.id] ?? p.score} pts
                           </span>
@@ -721,26 +723,26 @@ export default function GameScreen({
                 {sortedLeaderboard.length >= 2 && (
                   <div className="podium">
                     {sortedLeaderboard[1] && (
-                      <div className="podium-place">
+                      <div className="podium-place podium-2">
                         <Avatar name={sortedLeaderboard[1].name} seed={sortedLeaderboard[1].id} size="sm" />
-                        <span className="podium-name">{sortedLeaderboard[1].name}</span>
+                        <span className="podium-name" title={sortedLeaderboard[1].name}>{sortedLeaderboard[1].name}</span>
                         <div className="podium-bar">2</div>
                         <span className="podium-score">{sortedLeaderboard[1].score} pts</span>
                       </div>
                     )}
                     {sortedLeaderboard[0] && (
-                      <div className="podium-place">
+                      <div className="podium-place podium-1">
                         <div className="winner-crown" style={{ fontSize: "1.25rem", animation: "none" }}>👑</div>
                         <Avatar name={sortedLeaderboard[0].name} seed={sortedLeaderboard[0].id} size="sm" />
-                        <span className="podium-name">{sortedLeaderboard[0].name}</span>
+                        <span className="podium-name" title={sortedLeaderboard[0].name}>{sortedLeaderboard[0].name}</span>
                         <div className="podium-bar">1</div>
                         <span className="podium-score">{sortedLeaderboard[0].score} pts</span>
                       </div>
                     )}
                     {sortedLeaderboard[2] && (
-                      <div className="podium-place">
+                      <div className="podium-place podium-3">
                         <Avatar name={sortedLeaderboard[2].name} seed={sortedLeaderboard[2].id} size="sm" />
-                        <span className="podium-name">{sortedLeaderboard[2].name}</span>
+                        <span className="podium-name" title={sortedLeaderboard[2].name}>{sortedLeaderboard[2].name}</span>
                         <div className="podium-bar">3</div>
                         <span className="podium-score">{sortedLeaderboard[2].score} pts</span>
                       </div>

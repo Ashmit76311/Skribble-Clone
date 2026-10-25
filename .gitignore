@@ -4,3 +4,5 @@ dist
 *.tsbuildinfo
 e2e/screenshots
 screenshots
+e2e/ui-shots
+ui-shots
