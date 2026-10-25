@@ -1,6 +1,6 @@
 import { useState, useEffect, FormEvent } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { socket } from "../socket";
+import { socket, deviceId } from "../socket";
 import { SocketEvent, WordMode } from "@skribbl/shared";
 import type { RoomSettings } from "@skribbl/shared";
 import { useToast, ToastContainer } from "../components/Toast";
@@ -71,7 +71,7 @@ export default function Home() {
   function quickPlay() {
     const n = saveName();
     if (!n) return;
-    socket.emit(SocketEvent.QuickPlay, { name: n }, (res: any) => {
+    socket.emit(SocketEvent.QuickPlay, { name: n, deviceId }, (res: any) => {
       if (res.error) return addToast(res.error);
       if (res.token) {
         sessionStorage.setItem(
@@ -99,7 +99,7 @@ export default function Home() {
       ...settings,
       customWords: Array.from(new Set(customWords)).slice(0, 100),
     };
-    socket.emit(SocketEvent.CreateRoom, { name: n, settings: finalSettings }, (res: any) => {
+    socket.emit(SocketEvent.CreateRoom, { name: n, settings: finalSettings, deviceId }, (res: any) => {
       if (res.error) return addToast(res.error);
       if (res.token) {
         sessionStorage.setItem(
@@ -116,7 +116,7 @@ export default function Home() {
   function joinRoom(code: string) {
     const n = saveName();
     if (!n) return;
-    socket.emit(SocketEvent.JoinRoom, { name: n, code }, (res: any) => {
+    socket.emit(SocketEvent.JoinRoom, { name: n, code, deviceId }, (res: any) => {
       if (res.error) return addToast(res.error);
       if (res.token) {
         sessionStorage.setItem(

@@ -61,13 +61,13 @@ describe("Quick Play Room Choice Unit Logic", () => {
     r1.addPlayer(host);
 
     // Player not banned can find r1
-    const found = manager.findQuickPlayRoom("player-2", "1.2.3.4");
+    const found = manager.findQuickPlayRoom("player-2", "dev-2");
     assert.ok(found);
     assert.equal(found.code, r1.code);
 
-    // If player IP is banned in r1, findQuickPlayRoom skips it
-    r1.bannedIps.add("1.2.3.4");
-    const bannedSearch = manager.findQuickPlayRoom("player-2", "1.2.3.4");
+    // If player deviceId is banned in r1, findQuickPlayRoom skips it
+    r1.bannedIds.add("dev-2");
+    const bannedSearch = manager.findQuickPlayRoom("player-2", "dev-2");
     assert.equal(bannedSearch, null);
   });
 });

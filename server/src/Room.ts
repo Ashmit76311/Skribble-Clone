@@ -82,17 +82,14 @@ export class Room {
   game: Game | null = null;
   chatHistory: StoredChatMessage[] = [];
   bannedIds = new Set<string>();
-  bannedIps = new Set<string>();
 
   banPlayer(player: Player) {
     if (player.id) this.bannedIds.add(player.id);
-    if (player.ip) this.bannedIps.add(player.ip);
     if (player.deviceId) this.bannedIds.add(player.deviceId);
   }
 
-  isBanned(playerId?: string, ip?: string, deviceId?: string): boolean {
+  isBanned(playerId?: string, deviceId?: string): boolean {
     if (playerId && this.bannedIds.has(playerId)) return true;
-    if (ip && this.bannedIps.has(ip)) return true;
     if (deviceId && this.bannedIds.has(deviceId)) return true;
     return false;
   }
@@ -149,7 +146,7 @@ export class Room {
   }
 
   addPlayer(player: Player): string | null {
-    if (this.isBanned(player.id, player.ip, player.deviceId)) {
+    if (this.isBanned(player.id, player.deviceId)) {
       return "You are banned from this room";
     }
     if (this.players.length >= this.settings.maxPlayers) return "Room is full";

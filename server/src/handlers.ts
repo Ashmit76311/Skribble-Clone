@@ -35,6 +35,17 @@ function getClientIp(socket: Socket): string {
   return socket.handshake.address || "";
 }
 
+function getDeviceId(socket: Socket, payloadDeviceId?: string): string | undefined {
+  if (payloadDeviceId && typeof payloadDeviceId === "string" && payloadDeviceId.trim()) {
+    return payloadDeviceId.trim();
+  }
+  const authDev = socket.handshake.auth?.deviceId;
+  if (typeof authDev === "string" && authDev.trim()) {
+    return authDev.trim();
+  }
+  return undefined;
+}
+
 export function registerHandlers(io: Server, manager: RoomManager) {
   io.on("connection", (socket) => {
     socket.on(SocketEvent.CreateRoom, (data: CreateRoomPayload, cb) => {
@@ -43,7 +54,8 @@ export function registerHandlers(io: Server, manager: RoomManager) {
 
       const room = manager.createRoom(data.settings || {});
       const ip = getClientIp(socket);
-      const player = new Player(socket.id, name, ip);
+      const deviceId = getDeviceId(socket, data.deviceId);
+      const player = new Player(socket.id, name, ip, deviceId);
       room.addPlayer(player);
       socket.join(room.code);
       manager.trackSocket(socket.id, room.code);
@@ -62,11 +74,12 @@ export function registerHandlers(io: Server, manager: RoomManager) {
       if (!room) return cb({ error: "Room not found" });
 
       const ip = getClientIp(socket);
-      if (room.isBanned(undefined, ip)) {
+      const deviceId = getDeviceId(socket, data.deviceId);
+      if (room.isBanned(undefined, deviceId)) {
         return cb({ error: "You are banned from this room" });
       }
 
-      const player = new Player(socket.id, name, ip);
+      const player = new Player(socket.id, name, ip, deviceId);
       const err = room.addPlayer(player);
       if (err) return cb({ error: err });
 
@@ -98,7 +111,8 @@ export function registerHandlers(io: Server, manager: RoomManager) {
       if (!name) return cb({ error: "Name is required" });
 
       const ip = getClientIp(socket);
-      let room = manager.findQuickPlayRoom(undefined, ip);
+      const deviceId = getDeviceId(socket, data?.deviceId);
+      let room = manager.findQuickPlayRoom(undefined, deviceId);
       let isNew = false;
 
       if (!room) {
@@ -106,7 +120,7 @@ export function registerHandlers(io: Server, manager: RoomManager) {
         isNew = true;
       }
 
-      const player = new Player(socket.id, name, ip);
+      const player = new Player(socket.id, name, ip, deviceId);
       const err = room.addPlayer(player);
       if (err) {
         const fallbackRoom = manager.createRoom({ isPublic: true });
@@ -140,15 +154,15 @@ export function registerHandlers(io: Server, manager: RoomManager) {
       const room = manager.getRoom(data.code);
       if (!room) return cb({ error: "Room not found" });
 
-      const ip = getClientIp(socket);
-      if (room.isBanned(undefined, ip)) {
+      const deviceId = getDeviceId(socket, data?.deviceId);
+      if (room.isBanned(undefined, deviceId)) {
         return cb({ error: "You are banned from this room" });
       }
 
       const player = room.getPlayerByToken(data.token);
       if (!player) return cb({ error: "Invalid token or expired session" });
 
-      if (room.isBanned(player.id, ip, player.deviceId)) {
+      if (room.isBanned(player.id, player.deviceId || deviceId)) {
         return cb({ error: "You are banned from this room" });
       }
 

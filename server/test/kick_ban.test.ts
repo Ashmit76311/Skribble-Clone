@@ -20,19 +20,36 @@ const defaultSettings = {
 };
 
 describe("Kick and Ban Unit Logic", () => {
-  test("Room banPlayer records id, ip, and deviceId, and isBanned checks them", () => {
+  test("Room banPlayer records id and deviceId, and does not ban by IP", () => {
     const room = new Room("TEST1", defaultSettings);
     const p = new Player("s1", "BadActor", "1.2.3.4", "dev-123");
 
     assert.equal(room.isBanned(p.id), false);
-    assert.equal(room.isBanned(undefined, "1.2.3.4"), false);
+    assert.equal(room.isBanned(undefined, "dev-123"), false);
 
     room.banPlayer(p);
 
     assert.equal(room.isBanned(p.id), true);
-    assert.equal(room.isBanned(undefined, "1.2.3.4"), true);
-    assert.equal(room.isBanned(undefined, undefined, "dev-123"), true);
-    assert.equal(room.isBanned("other-id", "5.6.7.8"), false);
+    assert.equal(room.isBanned(undefined, "dev-123"), true);
+    assert.equal(room.isBanned("other-id", "dev-other"), false);
+  });
+
+  test("two different players with the same IP are not both blocked when one is banned", () => {
+    const room = new Room("TEST_SAME_IP", defaultSettings);
+    const p1 = new Player("s1", "BadActor", "192.168.1.50", "dev-bad-123");
+    const p2 = new Player("s2", "InnocentFriend", "192.168.1.50", "dev-innocent-456");
+
+    room.addPlayer(p1);
+    room.banPlayer(p1);
+
+    // Bad actor is banned
+    assert.equal(room.isBanned(p1.id, p1.deviceId), true);
+    assert.equal(room.isBanned(undefined, "dev-bad-123"), true);
+
+    // Innocent player sharing the exact same IP (e.g. Wi-Fi / proxy) is NOT banned
+    assert.equal(room.isBanned(p2.id, p2.deviceId), false);
+    assert.equal(room.isBanned(undefined, "dev-innocent-456"), false);
+    assert.equal(room.addPlayer(p2), null);
   });
 
   test("addPlayer rejects banned players", () => {
@@ -40,7 +57,7 @@ describe("Kick and Ban Unit Logic", () => {
     const p1 = new Player("s1", "Alice");
     room.addPlayer(p1);
 
-    const bad = new Player("s2", "Bob", "10.0.0.1");
+    const bad = new Player("s2", "Bob", "10.0.0.1", "dev-bad");
     room.banPlayer(bad);
 
     const err = room.addPlayer(bad);
@@ -64,8 +81,8 @@ describe("Kick and Ban Socket Integration", () => {
       io,
       manager,
       url,
-      createClient: () =>
-        Client(url, { transports: ["websocket"], forceNew: true }),
+      createClient: (auth?: { deviceId?: string }) =>
+        Client(url, { transports: ["websocket"], forceNew: true, auth }),
     };
   }
 
@@ -175,8 +192,8 @@ describe("Kick and Ban Socket Integration", () => {
 
   test("Host bans player, banned player cannot rejoin or join with new name", async () => {
     const { httpServer, io, manager, createClient } = await setupServer();
-    const s1 = createClient();
-    const s2 = createClient();
+    const s1 = createClient({ deviceId: "dev-host" });
+    const s2 = createClient({ deviceId: "dev-troublemaker" });
 
     await Promise.all([
       new Promise<void>((r) => s1.on("connect", () => r())),
@@ -204,17 +221,27 @@ describe("Kick and Ban Socket Integration", () => {
 
     assert.equal(bannedMsg, "You were banned from the room");
 
-    // S2 tries to join again
-    const s2New = createClient();
+    // S2 tries to join again with same deviceId -> banned
+    const s2New = createClient({ deviceId: "dev-troublemaker" });
     await new Promise<void>((r) => s2New.on("connect", () => r()));
     const tryJoinRes: any = await new Promise((r) =>
       s2New.emit(SocketEvent.JoinRoom, { name: "NewIdentity", code: roomCode }, r)
     );
     assert.equal(tryJoinRes.error, "You are banned from this room");
 
+    // Innocent user (s3) sharing the same IP with a different deviceId joins -> succeeds
+    const s3 = createClient({ deviceId: "dev-innocent" });
+    await new Promise<void>((r) => s3.on("connect", () => r()));
+    const tryJoinRes3: any = await new Promise((r) =>
+      s3.emit(SocketEvent.JoinRoom, { name: "InnocentFriend", code: roomCode }, r)
+    );
+    assert.equal(tryJoinRes3.error, undefined);
+    assert.ok(tryJoinRes3.token);
+
     s1.disconnect();
     s2.disconnect();
     s2New.disconnect();
+    s3.disconnect();
     const testRoom = manager.getRoom(roomCode);
     if (testRoom?.game) testRoom.game.destroy();
     manager.deleteRoom(roomCode);

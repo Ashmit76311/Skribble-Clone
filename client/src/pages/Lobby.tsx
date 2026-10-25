@@ -1,6 +1,6 @@
 import { useEffect, useState, FormEvent } from "react";
 import { useParams, useLocation, useNavigate } from "react-router-dom";
-import { socket } from "../socket";
+import { socket, deviceId } from "../socket";
 import { GamePhase, SocketEvent } from "@skribbl/shared";
 import type {
   RoomData,
@@ -63,7 +63,7 @@ export default function Lobby() {
   function performRejoin(token: string) {
     socket.emit(
       SocketEvent.RejoinRoom,
-      { code: code!, token },
+      { code: code!, token, deviceId },
       (res: RejoinRoomResponse) => {
         if (res.error) {
           clearStoredSession(code!);
@@ -92,7 +92,7 @@ export default function Lobby() {
   function joinRoom(playerName: string) {
     socket.emit(
       SocketEvent.JoinRoom,
-      { name: playerName, code: code! },
+      { name: playerName, code: code!, deviceId },
       (res: any) => {
         if (res.error) {
           addToast(res.error);

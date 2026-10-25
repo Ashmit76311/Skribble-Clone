@@ -19,6 +19,7 @@ const isProd =
     fs.existsSync(path.resolve(__dirname, "../../client/dist")));
 
 const app = express();
+app.set("trust proxy", 1);
 if (!isProd) {
   app.use(cors({ origin: CLIENT_URL }));
 }

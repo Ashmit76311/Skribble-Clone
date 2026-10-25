@@ -35,13 +35,13 @@ export class RoomManager {
     );
   }
 
-  findQuickPlayRoom(playerId?: string, ip?: string, deviceId?: string): Room | null {
+  findQuickPlayRoom(playerId?: string, deviceId?: string): Room | null {
     const candidates = [...this.rooms.values()].filter(
       (r) =>
         r.settings.isPublic &&
         r.phase === GamePhase.LOBBY &&
         r.players.length < r.settings.maxPlayers &&
-        !r.isBanned(playerId, ip, deviceId)
+        !r.isBanned(playerId, deviceId)
     );
     if (candidates.length === 0) return null;
     const rand = Math.floor(Math.random() * candidates.length);

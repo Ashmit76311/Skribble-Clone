@@ -66,11 +66,13 @@ export interface Stroke {
 export interface CreateRoomPayload {
   name: string;
   settings: RoomSettings;
+  deviceId?: string;
 }
 
 export interface JoinRoomPayload {
   name: string;
   code: string;
+  deviceId?: string;
 }
 
 export interface GuessPayload {
@@ -189,6 +191,7 @@ export interface PlayerLeftPayload {
 export interface RejoinRoomPayload {
   code: string;
   token: string;
+  deviceId?: string;
 }
 
 export interface RejoinRoomResponse {
@@ -232,6 +235,7 @@ export interface UpdateSettingsPayload {
 
 export interface QuickPlayPayload {
   name: string;
+  deviceId?: string;
 }
 
 export interface QuickPlayResponse {
