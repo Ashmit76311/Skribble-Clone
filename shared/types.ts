@@ -230,3 +230,14 @@ export interface UpdateSettingsPayload {
   settings: Partial<RoomSettings>;
 }
 
+export interface QuickPlayPayload {
+  name: string;
+}
+
+export interface QuickPlayResponse {
+  room?: RoomData;
+  token?: string;
+  playerId?: string;
+  error?: string;
+}
+

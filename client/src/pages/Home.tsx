@@ -40,6 +40,8 @@ export default function Home() {
 
   useEffect(() => {
     fetchPublicRooms();
+    const timer = setInterval(fetchPublicRooms, 4000);
+    return () => clearInterval(timer);
   }, []);
 
   useEffect(() => {
@@ -64,6 +66,23 @@ export default function Home() {
     }
     localStorage.setItem("name", trimmed);
     return trimmed;
+  }
+
+  function quickPlay() {
+    const n = saveName();
+    if (!n) return;
+    socket.emit(SocketEvent.QuickPlay, { name: n }, (res: any) => {
+      if (res.error) return addToast(res.error);
+      if (res.token) {
+        sessionStorage.setItem(
+          `session_${res.room.code.toUpperCase()}`,
+          JSON.stringify({ code: res.room.code, token: res.token, playerId: res.playerId })
+        );
+      }
+      navigate(`/room/${res.room.code}`, {
+        state: { room: res.room, playerId: res.playerId },
+      });
+    });
   }
 
   function createRoom(e: FormEvent) {
@@ -134,6 +153,14 @@ export default function Home() {
           maxLength={20}
           className="input"
         />
+        <button
+          type="button"
+          className="btn btn-primary btn-quick-play"
+          onClick={quickPlay}
+          style={{ width: "100%", marginTop: "0.5rem" }}
+        >
+          Quick Play
+        </button>
       </div>
 
       <div className="card">
@@ -255,7 +282,12 @@ export default function Home() {
 
       {publicRooms.length > 0 && (
         <div className="card">
-          <h2>Public Rooms</h2>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem" }}>
+            <h2 style={{ margin: 0 }}>Public Rooms</h2>
+            <button className="btn btn-xs" type="button" onClick={fetchPublicRooms}>
+              Refresh
+            </button>
+          </div>
           <div className="public-rooms">
             {publicRooms.map((r) => (
               <div key={r.code} className="room-row">

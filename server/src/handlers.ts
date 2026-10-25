@@ -10,6 +10,7 @@ import type {
   ChatMessagePayload,
   KickPlayerPayload,
   UpdateSettingsPayload,
+  QuickPlayPayload,
 } from "@skribbl/shared";
 import { RoomManager } from "./RoomManager.js";
 import { Player } from "./Player.js";
@@ -90,6 +91,45 @@ export function registerHandlers(io: Server, manager: RoomManager) {
           hint: null,
         });
       }
+    });
+
+    socket.on(SocketEvent.QuickPlay, (data: QuickPlayPayload, cb) => {
+      const name = data?.name?.trim();
+      if (!name) return cb({ error: "Name is required" });
+
+      const ip = getClientIp(socket);
+      let room = manager.findQuickPlayRoom(undefined, ip);
+      let isNew = false;
+
+      if (!room) {
+        room = manager.createRoom({ isPublic: true });
+        isNew = true;
+      }
+
+      const player = new Player(socket.id, name, ip);
+      const err = room.addPlayer(player);
+      if (err) {
+        const fallbackRoom = manager.createRoom({ isPublic: true });
+        fallbackRoom.addPlayer(player);
+        room = fallbackRoom;
+        isNew = true;
+      }
+
+      socket.join(room.code);
+      manager.trackSocket(socket.id, room.code);
+
+      if (!isNew) {
+        socket.to(room.code).emit(SocketEvent.PlayerJoined, {
+          player: player.toJSON(),
+          players: room.players.map((p) => p.toJSON()),
+        });
+      }
+
+      cb({
+        room: room.toJSON(player.id),
+        token: player.token,
+        playerId: player.id,
+      });
     });
 
     socket.on(SocketEvent.RejoinRoom, (data: RejoinRoomPayload, cb) => {
